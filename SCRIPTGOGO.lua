@@ -1,19 +1,23 @@
 -- ============================================
--- SCRIPT GOGO
--- ============================================
--- COMO USAR:
--- 1. Abra o Delta Executor
--- 2. Entre no Blox Fruits
--- 3. Cole este script inteiro
--- 4. Execute
--- 5. Na tela de KEY, use uma das keys mestras:
---    MASTER-SCRIPT-2024 | GOGO-ULTIMATE | ADMIN-KEY-1234 | PERMANENT-KEY
+-- SCRIPT GOGO - GODHUMAN FARMER V9.0
+-- SISTEMA DE KEY LOOTLABS COM VALIDADE 24H
 -- ============================================
 
 print("SCRIPT GOGO - CARREGANDO...")
 
 -- ============================================
--- 1. SISTEMA DE KEY COM VALIDADE 24H
+-- CONFIGURACAO LOOTLABS
+-- ============================================
+local Lootlabs_Config = {
+    Enabled = true,
+    API_Key = "SUA_CHAVE_DE_API_AQUI", 
+    Link = "URL_DO_SEU_LINK_LOOTLABS",
+    API_URL = "https://api.lootlabs.xyz/verify",
+    ExpiryHours = 24
+}
+
+-- ============================================
+-- 1. SISTEMA DE KEY LOOTLABS COM 24H
 -- ============================================
 local KeySystem = {}
 KeySystem.__index = KeySystem
@@ -24,7 +28,7 @@ function KeySystem.new()
     self.verified = false
     self.retryAttempts = 0
     self.maxRetries = 5
-    self.keyExpiryHours = 24
+    self.expiryHours = Lootlabs_Config.ExpiryHours
     self.currentUser = nil
     self.userId = self:generateUserId()
     return self
@@ -48,23 +52,8 @@ function KeySystem:generateUserId()
     return userId
 end
 
-function KeySystem:generateUserKey(userId, expiryDate)
-    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    local result = ""
-    local combined = userId .. (expiryDate or os.date("%Y-%m-%d"))
-    local seed = 0
-    for i = 1, #combined do
-        seed = seed + string.byte(combined, i)
-    end
-    math.randomseed(seed)
-    for i = 1, 4 do
-        if i > 1 then result = result .. "-" end
-        for j = 1, 4 do
-            local idx = math.random(1, #chars)
-            result = result .. string.sub(chars, idx, idx)
-        end
-    end
-    return result
+function KeySystem:getCurrentDate()
+    return os.date("%Y-%m-%d")
 end
 
 function KeySystem:isKeyExpired(savedData)
@@ -74,32 +63,13 @@ function KeySystem:isKeyExpired(savedData)
     return os.time() > savedData.expiryDate
 end
 
-function KeySystem:validateUserKey(userId, key, expiryDate)
-    local expectedKey = self:generateUserKey(userId, expiryDate)
-    if key == expectedKey then
-        return true
-    end
-    local masterKeys = {
-        "MASTER-SCRIPT-2024",
-        "GOGO-ULTIMATE",
-        "ADMIN-KEY-1234",
-        "PERMANENT-KEY"
-    }
-    for _, masterKey in ipairs(masterKeys) do
-        if key == masterKey then
-            return true
-        end
-    end
-    return false
-end
-
 function KeySystem:saveUserKey(userId, key, expiryDate)
     pcall(function()
         local data = {
             userId = userId,
             key = key,
             date = os.date("%Y-%m-%d %H:%M:%S"),
-            expiryDate = expiryDate or (os.time() + (24 * 3600))
+            expiryDate = expiryDate or (os.time() + (self.expiryHours * 3600))
         }
         local json = game:GetService("HttpService"):JSONEncode(data)
         writefile(self.keyFile, json)
@@ -120,6 +90,44 @@ function KeySystem:loadUserKey(userId)
     return result
 end
 
+function KeySystem:verifyWithLootlabs(key)
+    if not Lootlabs_Config.Enabled then
+        return false
+    end
+    
+    local success, response = pcall(function()
+        local data = {
+            key = key,
+            api_token = Lootlabs_Config.API_Key
+        }
+        local jsonData = game:GetService("HttpService"):JSONEncode(data)
+        
+        if syn and syn.request then
+            return syn.request({
+                Url = Lootlabs_Config.API_URL,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = jsonData
+            })
+        else
+            return game:HttpGet(Lootlabs_Config.API_URL .. "?key=" .. key .. "&api_token=" .. Lootlabs_Config.API_Key)
+        end
+    end)
+    
+    if success then
+        if type(response) == "string" then
+            local decoded = game:GetService("HttpService"):JSONDecode(response)
+            return decoded and decoded.valid == true
+        elseif response and response.StatusCode == 200 then
+            local decoded = game:GetService("HttpService"):JSONDecode(response.Body)
+            return decoded and decoded.valid == true
+        end
+    end
+    return false
+end
+
 function KeySystem:showKeyUI()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "KeySystem"
@@ -134,8 +142,8 @@ function KeySystem:showKeyUI()
     background.Parent = screenGui
     
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 450, 0, 450)
-    mainFrame.Position = UDim2.new(0.5, -225, 0.5, -225)
+    mainFrame.Size = UDim2.new(0, 450, 0, 480)
+    mainFrame.Position = UDim2.new(0.5, -225, 0.5, -240)
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     mainFrame.BorderSizePixel = 2
     mainFrame.BorderColor3 = Color3.fromRGB(255, 215, 0)
@@ -182,19 +190,41 @@ function KeySystem:showKeyUI()
     dateLabel.Parent = mainFrame
     
     local instructions = Instance.new("TextLabel")
-    instructions.Size = UDim2.new(1, 0, 0, 50)
-    instructions.Position = UDim2.new(0, 0, 0, 140)
+    instructions.Size = UDim2.new(1, 0, 0, 40)
+    instructions.Position = UDim2.new(0, 0, 0, 135)
     instructions.BackgroundTransparency = 1
-    instructions.Text = "INSIRA SUA KEY DIARIA"
+    instructions.Text = "INSIRA SUA KEY DIARIA\n(Obtenha no link abaixo)"
     instructions.TextColor3 = Color3.fromRGB(180, 180, 180)
     instructions.TextSize = 14
     instructions.Font = Enum.Font.GothamMedium
     instructions.TextWrapped = true
     instructions.Parent = mainFrame
     
+    local getKeyBtn = Instance.new("TextButton")
+    getKeyBtn.Size = UDim2.new(0.6, 0, 0, 35)
+    getKeyBtn.Position = UDim2.new(0.2, 0, 0, 190)
+    getKeyBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+    getKeyBtn.BorderSizePixel = 0
+    getKeyBtn.Text = "OBTER KEY (LOOTLABS)"
+    getKeyBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    getKeyBtn.TextSize = 14
+    getKeyBtn.Font = Enum.Font.GothamBold
+    getKeyBtn.Parent = mainFrame
+    
+    getKeyBtn.MouseButton1Click:Connect(function()
+        if Lootlabs_Config.Link and Lootlabs_Config.Link ~= "" then
+            setclipboard(Lootlabs_Config.Link)
+            status.Text = "LINK COPIADO! Acesse e obtenha sua key"
+            status.TextColor3 = Color3.fromRGB(0, 255, 100)
+        else
+            status.Text = "ERRO: Link da LootLabs nao configurado"
+            status.TextColor3 = Color3.fromRGB(255, 80, 80)
+        end
+    end)
+    
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(0.8, 0, 0, 45)
-    textBox.Position = UDim2.new(0.1, 0, 0, 205)
+    textBox.Position = UDim2.new(0.1, 0, 0, 240)
     textBox.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
     textBox.BorderSizePixel = 2
     textBox.BorderColor3 = Color3.fromRGB(255, 215, 0)
@@ -202,13 +232,13 @@ function KeySystem:showKeyUI()
     textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     textBox.TextSize = 18
     textBox.Font = Enum.Font.GothamMedium
-    textBox.PlaceholderText = "Cole sua key diaria aqui..."
+    textBox.PlaceholderText = "Cole sua key aqui..."
     textBox.ClearTextOnFocus = false
     textBox.Parent = mainFrame
     
     local verifyBtn = Instance.new("TextButton")
     verifyBtn.Size = UDim2.new(0.4, 0, 0, 45)
-    verifyBtn.Position = UDim2.new(0.3, 0, 0, 270)
+    verifyBtn.Position = UDim2.new(0.3, 0, 0, 305)
     verifyBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
     verifyBtn.BorderSizePixel = 0
     verifyBtn.Text = "VERIFICAR"
@@ -219,7 +249,7 @@ function KeySystem:showKeyUI()
     
     local status = Instance.new("TextLabel")
     status.Size = UDim2.new(1, 0, 0, 30)
-    status.Position = UDim2.new(0, 0, 0, 330)
+    status.Position = UDim2.new(0, 0, 0, 365)
     status.BackgroundTransparency = 1
     status.Text = "Aguardando key..."
     status.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -229,7 +259,7 @@ function KeySystem:showKeyUI()
     
     local retryInfo = Instance.new("TextLabel")
     retryInfo.Size = UDim2.new(1, 0, 0, 25)
-    retryInfo.Position = UDim2.new(0, 0, 0, 365)
+    retryInfo.Position = UDim2.new(0, 0, 0, 400)
     retryInfo.BackgroundTransparency = 1
     retryInfo.Text = "Tentativas: 0/" .. self.maxRetries
     retryInfo.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -239,7 +269,7 @@ function KeySystem:showKeyUI()
     
     local validInfo = Instance.new("TextLabel")
     validInfo.Size = UDim2.new(1, 0, 0, 20)
-    validInfo.Position = UDim2.new(0, 0, 0, 395)
+    validInfo.Position = UDim2.new(0, 0, 0, 430)
     validInfo.BackgroundTransparency = 1
     validInfo.Text = "Key valida por 24h | Renove diariamente"
     validInfo.TextColor3 = Color3.fromRGB(100, 100, 100)
@@ -254,24 +284,21 @@ function KeySystem:showKeyUI()
             return false
         end
         
-        status.Text = "Verificando key..."
+        status.Text = "Verificando key na LootLabs..."
         status.TextColor3 = Color3.fromRGB(255, 215, 0)
-        wait(1)
         
-        local today = os.date("%Y-%m-%d")
-        local expiryDate = os.time() + (self.keyExpiryHours * 3600)
-        local isValid = self:validateUserKey(self.userId, key, today)
+        local isValid = false
         
-        if isValid then
-            self.verified = true
-            self.currentUser = self.userId
-            status.Text = "KEY VALIDA! (Valida por 24h)"
-            status.TextColor3 = Color3.fromRGB(0, 255, 100)
-            self:saveUserKey(self.userId, key, expiryDate)
-            wait(0.8)
-            screenGui:Destroy()
-            return true
-        else
+        if Lootlabs_Config.Enabled then
+            local verified = self:verifyWithLootlabs(key)
+            if verified then
+                isValid = true
+            end
+        end
+        
+        if not isValid then
+            status.Text = "KEY INVALIDA! Tente novamente"
+            status.TextColor3 = Color3.fromRGB(255, 80, 80)
             self.retryAttempts = self.retryAttempts + 1
             retryInfo.Text = "Tentativas: " .. self.retryAttempts .. "/" .. self.maxRetries
             
@@ -283,7 +310,7 @@ function KeySystem:showKeyUI()
                 
                 local closeBtn = Instance.new("TextButton")
                 closeBtn.Size = UDim2.new(0.4, 0, 0, 40)
-                closeBtn.Position = UDim2.new(0.3, 0, 0, 270)
+                closeBtn.Position = UDim2.new(0.3, 0, 0, 305)
                 closeBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
                 closeBtn.BorderSizePixel = 0
                 closeBtn.Text = "FECHAR"
@@ -295,13 +322,23 @@ function KeySystem:showKeyUI()
                 closeBtn.MouseButton1Click:Connect(function()
                     screenGui:Destroy()
                 end)
-                return false
             end
-            
-            status.Text = "KEY INVALIDA! Tente novamente"
-            status.TextColor3 = Color3.fromRGB(255, 80, 80)
             return false
         end
+        
+        if isValid then
+            self.verified = true
+            self.currentUser = self.userId
+            local expiryDate = os.time() + (self.expiryHours * 3600)
+            self:saveUserKey(self.userId, key, expiryDate)
+            status.Text = "KEY VALIDA! (Valida por 24h)"
+            status.TextColor3 = Color3.fromRGB(0, 255, 100)
+            wait(0.8)
+            screenGui:Destroy()
+            return true
+        end
+        
+        return false
     end
     
     verifyBtn.MouseButton1Click:Connect(function()
@@ -337,7 +374,11 @@ function KeySystem:verify()
     local savedData = self:loadUserKey(self.userId)
     if savedData then
         if not self:isKeyExpired(savedData) then
-            if self:validateUserKey(self.userId, savedData.key, os.date("%Y-%m-%d")) then
+            local verified = false
+            if Lootlabs_Config.Enabled then
+                verified = self:verifyWithLootlabs(savedData.key)
+            end
+            if verified then
                 self.verified = true
                 return true
             end
@@ -405,8 +446,8 @@ local function showIntro()
     version.Size = UDim2.new(1, 0, 0, 25)
     version.Position = UDim2.new(0, 0, 0.45, 0)
     version.BackgroundTransparency = 1
-    version.Text = "V8.0 - KEY 24H + AUTO HAKI"
-    version.TextColor3 = Color3.fromRGB(200, 200, 200)
+    version.Text = "V9.0 - LOOTLABS KEY 24H"
+    version.TextColor3 = Color3.fromRGB(255, 215, 0)
     version.TextSize = 16
     version.Font = Enum.Font.GothamMedium
     version.TextScaled = true
@@ -425,7 +466,7 @@ local function showIntro()
     loadText.Size = UDim2.new(1, 0, 0, 30)
     loadText.Position = UDim2.new(0, 0, 0.65, 0)
     loadText.BackgroundTransparency = 1
-    loadText.Text = "CARREGANDO SISTEMA DE PRIORIDADES..."
+    loadText.Text = "CARREGANDO SISTEMA DE MASTERIZACAO..."
     loadText.TextColor3 = Color3.fromRGB(255, 255, 255)
     loadText.TextSize = 16
     loadText.Font = Enum.Font.GothamMedium
@@ -563,7 +604,7 @@ function Agent.new()
     
     self.keySystem = KeySystem.new()
     
-    print("Verificando key de 24h...")
+    print("Verificando key LootLabs 24h...")
     print("Seu ID: " .. self.keySystem.userId)
     
     if not self.keySystem:verify() then
@@ -589,16 +630,19 @@ function Agent.new()
     
     self.maxLevel = 2800
     self.fragmentsNeeded = 16500
+    self.masteryV1 = 400
+    self.masteryV2 = 500
     
     self.fightingStyles = {
         {name = "Combat", v1 = true, sea = "First Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false},
         {name = "Water Kung Fu", v1 = true, sea = "First Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false},
         {name = "Electric", v1 = true, sea = "First Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false},
+        {name = "Dragon Breath", v1 = true, sea = "Second Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false},
         {name = "Superhuman", v1 = false, sea = "Second Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Combat", "Water Kung Fu", "Electric"}},
         {name = "Death Step", v1 = false, sea = "Second Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Combat", "Water Kung Fu", "Electric"}},
-        {name = "Sharkman Karate", v1 = false, sea = "Third Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Water Kung Fu"}},
-        {name = "Electric Claw", v1 = false, sea = "Third Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Electric"}},
-        {name = "Dragon Talon", v1 = false, sea = "Third Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Superhuman"}}
+        {name = "Sharkman Karate", v1 = false, sea = "Third Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Water Kung Fu", "Dragon Breath"}},
+        {name = "Electric Claw", v1 = false, sea = "Third Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Electric", "Dragon Breath"}},
+        {name = "Dragon Talon", v1 = false, sea = "Third Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false, requires = {"Dragon Breath", "Superhuman"}}
     }
     
     self.godhumanRequirements = {
@@ -608,6 +652,7 @@ function Agent.new()
     }
     
     self.haki = {unlocked = false, mastery = 0, active = false}
+    self.masteryProgress = {}
     
     return self
 end
@@ -627,11 +672,18 @@ function Agent:loadState()
         currentStyle = nil, uptime = 0, lastRaidTime = 0,
         questsCompleted = 0,
         haki = {unlocked = false, mastery = 0, level = 0},
+        masteryProgress = {},
+        stylesObtained = {},
         settings = {
-            autoFarm = true, autoQuest = true, autoRaid = true,
-            autoMastery = true, autoSpinFruit = true,
-            autoTeleportFruit = true, autoSwitchSea = true,
-            autoHaki = true
+            autoFarm = true,
+            autoQuest = true,
+            autoRaid = true,
+            autoMastery = true,
+            autoSpinFruit = true,
+            autoTeleportFruit = true,
+            autoSwitchSea = true,
+            autoHaki = true,
+            autoMasteryAllStyles = true
         }
     }
 end
@@ -640,6 +692,239 @@ function Agent:saveState()
     pcall(function()
         local json = self.httpService:JSONEncode(self.state)
         writefile(self.fileName, json)
+    end)
+end
+
+function Agent:getStyleMastery(styleName)
+    local mastery = 0
+    pcall(function()
+        local data = self.player:FindFirstChild("Data")
+        if data then
+            local m = data:FindFirstChild(styleName .. "Mastery")
+            if m then
+                mastery = m.Value
+            end
+        end
+    end)
+    return mastery
+end
+
+function Agent:getStyleData(styleName)
+    for _, style in ipairs(self.fightingStyles) do
+        if style.name == styleName then
+            return style
+        end
+    end
+    return nil
+end
+
+function Agent:hasStyleRequirements(style)
+    if not style.requires then return true end
+    for _, reqName in ipairs(style.requires) do
+        local reqStyle = self:getStyleData(reqName)
+        if not reqStyle or not reqStyle.obtained then
+            return false
+        end
+        local mastery = self:getStyleMastery(reqName)
+        if mastery < (reqStyle.v1 and 400 or 500) then
+            return false
+        end
+    end
+    return true
+end
+
+function Agent:obtainStyle(styleName)
+    pcall(function()
+        local style = self:getStyleData(styleName)
+        if not style or style.obtained then return end
+        
+        if style.sea ~= self.state.currentSea then
+            print("Precisa estar no " .. style.sea .. " para obter " .. styleName)
+            return
+        end
+        
+        if not style.v1 and not self:hasStyleRequirements(style) then
+            print("Faltam pre-requisitos para " .. styleName)
+            return
+        end
+        
+        self.antiCheat:humanizeAction(function()
+            self.replicatedStorage.Remotes.CommF_:InvokeServer("Buy", styleName)
+        end)
+        
+        style.obtained = true
+        self.state.stylesObtained[styleName] = true
+        self:saveState()
+        print("Estilo obtido: " .. styleName)
+    end)
+end
+
+function Agent:equipStyle(styleName)
+    pcall(function()
+        self.antiCheat:humanizeAction(function()
+            self.replicatedStorage.Remotes.CommF_:InvokeServer("Equip", styleName)
+        end)
+        self.state.currentStyle = styleName
+        self:saveState()
+        print("Estilo equipado: " .. styleName)
+    end)
+end
+
+function Agent:getNextStyleToMaster()
+    for _, requiredStyle in ipairs(self.godhumanRequirements.styles) do
+        local styleData = self:getStyleData(requiredStyle)
+        if styleData then
+            local mastery = self:getStyleMastery(requiredStyle)
+            local required = styleData.v1 and self.masteryV1 or self.masteryV2
+            
+            if not styleData.obtained then
+                if self:canObtainStyle(styleData) then
+                    return requiredStyle
+                end
+            elseif mastery < required then
+                return requiredStyle
+            end
+        end
+    end
+    
+    for _, style in ipairs(self.fightingStyles) do
+        if style.v1 then
+            local mastery = self:getStyleMastery(style.name)
+            if not style.obtained and self:canObtainStyle(style) then
+                return style.name
+            elseif style.obtained and mastery < self.masteryV1 then
+                return style.name
+            end
+        end
+    end
+    
+    for _, style in ipairs(self.fightingStyles) do
+        if not style.v1 then
+            local mastery = self:getStyleMastery(style.name)
+            if not style.obtained and self:canObtainStyle(style) then
+                return style.name
+            elseif style.obtained and mastery < self.masteryV2 then
+                return style.name
+            end
+        end
+    end
+    
+    return nil
+end
+
+function Agent:canObtainStyle(style)
+    if style.sea ~= self.state.currentSea then
+        return false
+    end
+    if not style.v1 and not self:hasStyleRequirements(style) then
+        return false
+    end
+    return true
+end
+
+function Agent:autoMasteryAllStyles()
+    if not self.state.settings.autoMasteryAllStyles then return end
+    if self.state.godhuman then 
+        print("GodHuman ja desbloqueado! Mastery completa.")
+        return 
+    end
+    
+    local allMastered = true
+    for _, style in ipairs(self.fightingStyles) do
+        local mastery = self:getStyleMastery(style.name)
+        local required = style.v1 and self.masteryV1 or self.masteryV2
+        if style.obtained and mastery < required then
+            allMastered = false
+            break
+        end
+        if not style.obtained then
+            allMastered = false
+            break
+        end
+    end
+    
+    if allMastered then
+        print("Todos os estilos masterizados! Iniciando GodHuman...")
+        self:unlockGodHuman()
+        return
+    end
+    
+    local nextStyle = self:getNextStyleToMaster()
+    if not nextStyle then
+        print("Nenhum estilo disponivel para masterizar.")
+        return
+    end
+    
+    local styleData = self:getStyleData(nextStyle)
+    if not styleData then return end
+    
+    if not styleData.obtained then
+        self:obtainStyle(nextStyle)
+        wait(1)
+        if not styleData.obtained then
+            print("Nao foi possivel obter " .. nextStyle .. ". Movendo para proximo...")
+            return
+        end
+    end
+    
+    if self.state.currentStyle ~= nextStyle then
+        self:equipStyle(nextStyle)
+        wait(0.5)
+    end
+    
+    local currentMastery = self:getStyleMastery(nextStyle)
+    local requiredMastery = styleData.v1 and self.masteryV1 or self.masteryV2
+    
+    if currentMastery < requiredMastery then
+        self:fastAttack()
+    else
+        styleData.unlocked = true
+        self:saveState()
+        print(nextStyle .. " masterizado! (" .. currentMastery .. "/" .. requiredMastery .. ")")
+    end
+end
+
+function Agent:unlockGodHuman()
+    pcall(function()
+        if self.state.godhuman then return end
+        
+        local allStylesMastered = true
+        for _, styleName in ipairs(self.godhumanRequirements.styles) do
+            local style = self:getStyleData(styleName)
+            if not style or not style.obtained then
+                allStylesMastered = false
+                break
+            end
+            local mastery = self:getStyleMastery(styleName)
+            if mastery < 500 then
+                allStylesMastered = false
+                break
+            end
+        end
+        
+        if not allStylesMastered then
+            print("Ainda faltam estilos para GodHuman.")
+            return
+        end
+        
+        if self.state.fragments < self.fragmentsNeeded then
+            print("Fragmentos insuficientes: " .. self.state.fragments .. "/" .. self.fragmentsNeeded)
+            self:autoRaid()
+            return
+        end
+        
+        if self.state.level < 2000 then
+            print("Nivel insuficiente: " .. self.state.level .. "/2000")
+            return
+        end
+        
+        self.antiCheat:humanizeAction(function()
+            self.replicatedStorage.Remotes.CommF_:InvokeServer("Buy", "GodHuman")
+        end)
+        
+        self.state.godhuman = true
+        self:saveState()
+        print("GODHUMAN DESBLOQUEADO COM SUCESSO!")
     end)
 end
 
@@ -761,6 +1046,13 @@ function Agent:fastAttack()
         local xpGain = 50 * self:getXPMultiplier()
         self.state.xp = (self.state.xp or 0) + xpGain
         self:checkLevelUp()
+        
+        local currentStyle = self.state.currentStyle
+        if currentStyle then
+            local mastery = self:getStyleMastery(currentStyle)
+            self.state.masteryProgress[currentStyle] = mastery
+            self:saveState()
+        end
     end)
 end
 
@@ -925,131 +1217,33 @@ function Agent:autoTeleportFruit()
     end)
 end
 
-function Agent:autoMastery()
-    if not self.state.settings.autoMastery then return end
-    
-    pcall(function()
-        local currentStyle = self.state.currentStyle
-        
-        if not currentStyle then
-            for _, style in ipairs(self.fightingStyles) do
-                if style.obtained then
-                    self:equipStyle(style.name)
-                    break
-                end
-            end
-            return
-        end
-        
-        local mastery = self:getStyleMastery(currentStyle)
-        local styleData = self:getStyleData(currentStyle)
-        
-        if styleData and mastery >= styleData.masteryRequired then
-            local nextStyle = self:getNextStyleToMaster()
-            if nextStyle then
-                self:equipStyle(nextStyle)
-            end
-        end
-        
-        self:fastAttack()
-    end)
-end
-
-function Agent:getStyleMastery(styleName)
-    local mastery = 0
-    pcall(function()
-        local data = self.player:FindFirstChild("Data")
-        if data then
-            local m = data:FindFirstChild(styleName .. "Mastery")
-            if m then
-                mastery = m.Value
-            end
-        end
-    end)
-    return mastery
-end
-
-function Agent:getStyleData(styleName)
-    for _, style in ipairs(self.fightingStyles) do
-        if style.name == styleName then
-            return style
-        end
-    end
-    return nil
-end
-
-function Agent:getNextStyleToMaster()
-    for _, requiredStyle in ipairs(self.godhumanRequirements.styles) do
-        local styleData = self:getStyleData(requiredStyle)
-        if styleData and not styleData.obtained then
-            return requiredStyle
-        end
-        if styleData and styleData.mastery < (styleData.v1 and 400 or 500) then
-            return requiredStyle
-        end
-    end
-    
-    for _, style in ipairs(self.fightingStyles) do
-        if style.v1 and not style.obtained then
-            return style.name
-        end
-        if style.v1 and style.mastery < 400 then
-            return style.name
-        end
-    end
-    
-    for _, style in ipairs(self.fightingStyles) do
-        if not style.v1 and not style.obtained then
-            return style.name
-        end
-        if not style.v1 and style.mastery < 500 then
-            return style.name
-        end
-    end
-    
-    return nil
-end
-
-function Agent:equipStyle(styleName)
-    pcall(function()
-        self.antiCheat:humanizeAction(function()
-            self.replicatedStorage.Remotes.CommF_:InvokeServer("Equip", styleName)
-        end)
-        self.state.currentStyle = styleName
-        self:saveState()
-        print("Estilo equipado: " .. styleName)
-    end)
-end
-
-function Agent:unlockGodHuman()
-    pcall(function()
-        if self.state.godhuman then return end
-        
-        if self.state.fragments >= self.fragmentsNeeded and self.state.level >= 2000 then
-            self.antiCheat:humanizeAction(function()
-                self.replicatedStorage.Remotes.CommF_:InvokeServer("Buy", "GodHuman")
-            end)
-            self.state.godhuman = true
-            self:saveState()
-            print("GODHUMAN DESBLOQUEADO!")
-        end
-    end)
-end
-
 function Agent:decidePriority()
     if not self.state.godhuman then
-        if self.state.fragments >= self.fragmentsNeeded and self.state.level >= 2000 then
-            self:unlockGodHuman()
-            return
+        if self.state.settings.autoMasteryAllStyles then
+            self:autoMasteryAllStyles()
+            local currentStyle = self.state.currentStyle
+            if currentStyle then
+                local mastery = self:getStyleMastery(currentStyle)
+                local styleData = self:getStyleData(currentStyle)
+                if styleData and mastery < (styleData.v1 and self.masteryV1 or self.masteryV2) then
+                    return
+                end
+            end
         end
+        
         if self.state.fragments < self.fragmentsNeeded and self.state.level >= 700 then
             self:autoRaid()
             return
         end
+        
         if self.state.level < 2000 then
             self:fastAttack()
             self:autoQuest()
-            self:autoMastery()
+            return
+        end
+        
+        if self.state.fragments >= self.fragmentsNeeded and self.state.level >= 2000 then
+            self:unlockGodHuman()
             return
         end
     end
@@ -1057,19 +1251,17 @@ function Agent:decidePriority()
     if self.state.level < self.maxLevel then
         self:fastAttack()
         self:autoQuest()
-        self:autoMastery()
         return
     end
     
     self:autoSpinFruit()
     self:autoTeleportFruit()
-    if not self.state.godhuman then
-        self:autoRaid()
-    end
 end
 
 function Agent:run()
     print("SCRIPT GOGO - EM EXECUCAO!")
+    print("Kaitun Mode: Masterizando todos os estilos...")
+    print("Key LootLabs 24h ativada")
     
     while true do
         pcall(function()
@@ -1086,7 +1278,6 @@ end
 -- 6. INICIALIZACAO
 -- ============================================
 local function main()
-    -- Verificar se o jogador existe
     local player = game.Players.LocalPlayer
     if not player then
         print("Aguardando jogador...")
@@ -1094,13 +1285,9 @@ local function main()
         print("Jogador encontrado!")
     end
     
-    -- Mostrar intro
     showIntro()
-    
-    -- Aplicar otimizacoes
     optimizeGame()
     
-    -- Criar e executar agente
     local agent = Agent.new()
     if agent then
         agent:run()
