@@ -1,425 +1,416 @@
 -- ============================================
--- SCRIPT GOGO
+-- SCRIPT GOGO V21.0 
+-- ============================================
+-- ALL FEATURES:
+-- - Full GUI with tabs, bars, buttons, logs
+-- - Emergency mode
+-- - File logging system
+-- - Auto Save (30s)
+-- - Data cache
+-- - Webhook notifications
+-- - Auto Redeem codes (2x XP)
+-- - Daily key (LootLabs) + Permanent key (UserId)
+-- - Automatic permanent key generator (admin mode)
+-- - Auto-update (GitHub, no player kick)
+-- - Auto-protection (detection + safe mode)
+-- - Async AI (no freezes)
+-- - Farm, Mastery, GodHuman, Raids, Quest, Haki, Fruits
 -- ============================================
 
-print("SCRIPT GOGO - INICIANDO...")
+print("SCRIPT GOGO - STARTING...")
 
--- ============================================
--- CONFIGURAÇÕES
--- ============================================
-Configuração local = {
+local Config = {
     REPO_URL = "https://raw.githubusercontent.com/SEU_USUARIO/Gogo-script/main/",
-    ARQUIVO_DE_VERSÃO = "versão.txt",
+    VERSION_FILE = "version.txt",
     SCRIPT_FILE = "Gogo-script.lua",
     LOCAL_VERSION_FILE = "scriptgogo_version.txt",
     LOCAL_UPDATE_FILE = "scriptgogo_update.lua",
     CACHE_TTL = 3600,
-    INTERVALO_DE_SALVAMENTO = 30,
+    SAVE_INTERVAL = 30,
     LOG_FILE = "scriptgogo_log.txt",
 }
 
 local Lootlabs_Config = {
-    Ativado = verdadeiro,
+    Enabled = true,
     API_Key = "SUA_CHAVE_DE_API_AQUI",
     Link = "URL_DO_SEU_LINK_LOOTLABS",
     API_URL = "https://api.lootlabs.xyz/verify",
-    Validade = 24
+    ExpiryHours = 24
 }
 
 local KeyConfig = {
-    PREFIXO_CHAVE_PERMANENTE = "GOGO-PERM-",
+    PERMANENT_KEY_PREFIX = "GOGO-PERM-",
     PERMANENT_LIST_URL = "https://raw.githubusercontent.com/SEU_USUARIO/Gogo-script/main/perm_keys.json",
-    USAR_PREFIXO = verdadeiro,
+    USE_PREFIX = true,
     USE_EXTERNAL_LIST = true,
-    CACHE_LISTA_EXTERNA = 3600,
+    EXTERNAL_LIST_CACHE = 3600,
 }
 
--- Webhook (opcional – deixe vazio para desativar)
 local WebhookConfig = {
     URL = "",
-    Ativado = falso,
+    Enabled = false,
 }
 
-- Resgate automático de códigos (2x XP)
 local CodeConfig = {
-    Ativado = verdadeiro,
+    Enabled = true,
     CheckInterval = 60,
     CodesURL = "",
-    CódigosFixados = {
+    FixedCodes = {
         "KITT_RESET", "Sub2Officiel", "Starcodeheo", "Bluxxy",
         "Fudd10", "Bignews", "Noob2Pro", "2MillionVisits"
     }
 }
 
--- ============================================
--- MODO ADMINISTRADOR (GERADOR DE CHAVES)
--- ============================================
--- ATENÇÃO: Altere esta variável para true APENAS quando quiser gerar chaves.
--- Depois de gerar, coloque false novamente para que o script funcione normalmente.
--- ============================================
-local ADMIN_MODE = false -- <--- Mude para true para gerar chaves, depois volte a false
+local ADMIN_MODE = false
 
 -- ============================================
--- SISTEMA DE WEBHOOK
+-- WEBHOOK SYSTEM
 -- ============================================
-Webhook local = {}
+local Webhook = {}
 Webhook.__index = Webhook
 
-função Webhook.send(mensagem)
-    Se não WebhookConfig.Enabled ou WebhookConfig.URL == "", retorne o fim.
-    pcall(função()
-        dados locais = {
-            conteúdo = mensagem,
-            nome de usuário = "Script GOGO",
+function Webhook.send(message)
+    if not WebhookConfig.Enabled or WebhookConfig.URL == "" then return end
+    pcall(function()
+        local data = {
+            content = message,
+            username = "Script GOGO",
         }
         local json = game:GetService("HttpService"):JSONEncode(data)
-        se syn e syn.request então
+        if syn and syn.request then
             syn.request({
                 Url = WebhookConfig.URL,
-                Método = "POST",
-                Cabeçalhos = { ["Content-Type"] = "application/json" },
-                Corpo = json
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = json
             })
-        fim
-    fim)
-fim
+        end
+    end)
+end
 
--- ============================================
--- SISTEMA DE LOGS (FICHEIRO)
--- ============================================
 local Logger = {}
 Logger.__index = Logger
 
-função Logger.log(msg)
-    pcall(função()
-        hora local = os.date("%Y-%m-%d %H:%M:%S")
-        linha local = "[" .. tempo .. "] " .. msg .. "\n"
-        conteúdo local = ""
-        se isfile(Config.LOG_FILE) então
-            conteúdo = lerararquivo(Config.LOG_FILE)
-        fim
-        writefile(Config.LOG_FILE, conteúdo .. linha)
-    fim)
-fim
+function Logger.log(msg)
+    pcall(function()
+        local time = os.date("%Y-%m-%d %H:%M:%S")
+        local line = "[" .. time .. "] " .. msg .. "\n"
+        local content = ""
+        if isfile(Config.LOG_FILE) then
+            content = readfile(Config.LOG_FILE)
+        end
+        writefile(Config.LOG_FILE, content .. line)
+    end)
+end
 
-função Logger.clear()
-    pcall(função()
+function Logger.clear()
+    pcall(function()
         writefile(Config.LOG_FILE, "")
-    fim)
-fim
+    end)
+end
 
--- ============================================
--- SISTEMA DE AUTO-PROTEÇÃO
--- ============================================
-Sistema de proteção local = {}
-SistemaProteção.__index = SistemaProteção
+local ProtectionSystem = {}
+ProtectionSystem.__index = ProtectionSystem
 
-função ProtectionSystem.new()
+function ProtectionSystem.new()
     local self = setmetatable({}, ProtectionSystem)
     self.detectedFile = "scriptgogo_detected.txt"
-    self.safeMode = falso
+    self.safeMode = false
     self.lastBanTime = 0
     self.banCooldown = 3600
-    retornar a si mesmo
-fim
+    return self
+end
 
-função ProtectionSystem:checkDetection()
-    local detectado = falso
-    pcall(função()
-        se isfile(self.detectedFile) então
-            conteúdo local = lerararquivo(self.detectedFile)
-            dados locais = jogo:GetService("HttpService"):JSONDecode(conteúdo)
-            se data e data.timestamp então
-                local agora = os.time()
-                se agora - data.timestamp < self.banCooldown então
-                    detectado = verdadeiro
+function ProtectionSystem:checkDetection()
+    local detected = false
+    pcall(function()
+        if isfile(self.detectedFile) then
+            local content = readfile(self.detectedFile)
+            local data = game:GetService("HttpService"):JSONDecode(content)
+            if data and data.timestamp then
+                local now = os.time()
+                if now - data.timestamp < self.banCooldown then
+                    detected = true
                     self.lastBanTime = data.timestamp
                     self.safeMode = true
-                fim
-            fim
-        fim
-    fim)
-    retorno detectado
-fim
+                end
+            end
+        end
+    end)
+    return detected
+end
 
-função ProtectionSystem:registerDetection(motivo)
-    pcall(função()
-        dados locais = { timestamp = os.time(), motivo = motivo ou "Desconhecido", versão = "21.0" }
+function ProtectionSystem:registerDetection(reason)
+    pcall(function()
+        local data = { timestamp = os.time(), reason = reason or "Unknown", version = "21.0" }
         local json = game:GetService("HttpService"):JSONEncode(data)
-        escreverarquivo(self.detectedFile, json)
+        writefile(self.detectedFile, json)
         self.safeMode = true
         self.lastBanTime = os.time()
-        Webhook.send("DETECÇÃO REGISTADA: " .. motivo)
-        Logger.log("DETECÇÃO: " .. motivo)
-    fim)
-fim
+        Webhook.send("DETECTION REGISTERED: " .. reason)
+        Logger.log("DETECTION: " .. reason)
+    end)
+end
 
-função ProtectionSystem:clearDetection()
-    pcall(função()
-        se isfile(self.detectedFile) então
-            escreverarquivo(self.detectedFile, "")
-        fim
-        self.safeMode = falso
-        Logger.log("Registo de detecção limpo.")
-    fim)
-fim
+function ProtectionSystem:clearDetection()
+    pcall(function()
+        if isfile(self.detectedFile) then
+            writefile(self.detectedFile, "")
+        end
+        self.safeMode = false
+        Logger.log("Detection record cleared.")
+    end)
+end
 
-função ProtectionSystem:loadEmergencyScript()
-    conteúdo de emergência local = nulo
-    pcall(função()
-        URL local = Config.REPO_URL .. "Gogo-script_safe.lua"
+function ProtectionSystem:loadEmergencyScript()
+    local emergencyContent = nil
+    pcall(function()
+        local url = Config.REPO_URL .. "Gogo-script_safe.lua"
         emergencyContent = game:HttpGet(url)
-    fim)
-    se emergencyContent e #emergencyContent > 100 então
-        retornar carregarstring(conteúdo de emergência)
-    fim
-    retornar nulo
-fim
+    end)
+    if emergencyContent and #emergencyContent > 100 then
+        return loadstring(emergencyContent)
+    end
+    return nil
+end
 
--- ============================================
--- SISTEMA DE AUTO-UPDATE
--- ============================================
 local UpdateSystem = {}
 UpdateSystem.__index = UpdateSystem
 
-função UpdateSystem.new()
+function UpdateSystem.new()
     local self = setmetatable({}, UpdateSystem)
     self.currentVersion = self:getLocalVersion()
-    self.latestVersion = nulo
+    self.latestVersion = nil
     self.updateAvailable = false
     self.updateDownloaded = false
     self.lastCheck = 0
-    retornar a si mesmo
-fim
+    return self
+end
 
-função UpdateSystem:getLocalVersion()
-    versão local = "0.0.0"
-    pcall(função()
-        se isfile(Config.LOCAL_VERSION_FILE) então
-            conteúdo local = readfile(Config.LOCAL_VERSION_FILE)
-            se conteúdo e conteúdo ~= "" então
-                versão = conteúdo
-            fim
-        fim
-    fim)
-    versão de retorno
-fim
+function UpdateSystem:getLocalVersion()
+    local version = "0.0.0"
+    pcall(function()
+        if isfile(Config.LOCAL_VERSION_FILE) then
+            local content = readfile(Config.LOCAL_VERSION_FILE)
+            if content and content ~= "" then
+                version = content
+            end
+        end
+    end)
+    return version
+end
 
-função UpdateSystem:saveLocalVersion(versão)
+function UpdateSystem:saveLocalVersion(version)
     pcall(function() writefile(Config.LOCAL_VERSION_FILE, version) end)
-fim
+end
 
-função UpdateSystem:checkForUpdate(force)
-    local agora = os.time()
-    se não forçar e (agora - self.lastCheck) < Config.CACHE_TTL então
-        retornar self.updateDisponível
-    fim
-    self.lastCheck = agora
+function UpdateSystem:checkForUpdate(force)
+    local now = os.time()
+    if not force and (now - self.lastCheck) < Config.CACHE_TTL then
+        return self.updateAvailable
+    end
+    self.lastCheck = now
 
-    sucesso local, versãoRemota = pcall(função()
-        URL local = Config.REPO_URL .. Config.VERSION_FILE
-        retornar jogo:HttpGet(url)
-    fim)
+    local success, remoteVersion = pcall(function()
+        local url = Config.REPO_URL .. Config.VERSION_FILE
+        return game:HttpGet(url)
+    end)
 
-    se sucesso e remoteVersion e remoteVersion ~= "" então
+    if success and remoteVersion and remoteVersion ~= "" then
         remoteVersion = string.gsub(remoteVersion, "%s+", "")
         self.latestVersion = remoteVersion
-        se remoteVersion ~= self.currentVersion então
+        if remoteVersion ~= self.currentVersion then
             self.updateAvailable = true
-            Logger.log("Nova versão disponível: " .. remoteVersion)
-            Webhook.send("Nova versão disponível: " .. remoteVersion)
-        outro
+            Logger.log("New version available: " .. remoteVersion)
+            Webhook.send("New version available: " .. remoteVersion)
+        else
             self.updateAvailable = false
-        fim
-    outro
+        end
+    else
         self.updateAvailable = false
-    fim
-    retornar self.updateDisponível
-fim
+    end
+    return self.updateAvailable
+end
 
-função UpdateSystem:downloadUpdate()
-    Se não houver atualização disponível, retorne falso.
-    sucesso local, scriptContent = pcall(function()
-        retornar jogo:HttpGet(Config.REPO_URL .. Config.SCRIPT_FILE)
-    fim)
-    Se sucesso e scriptContent e #scriptContent > 100 então
-        pcall(função()
-            escreverarquivo(Config.LOCAL_UPDATE_FILE, conteúdo_do_script)
+function UpdateSystem:downloadUpdate()
+    if not self.updateAvailable then return false end
+    local success, scriptContent = pcall(function()
+        return game:HttpGet(Config.REPO_URL .. Config.SCRIPT_FILE)
+    end)
+    if success and scriptContent and #scriptContent > 100 then
+        pcall(function()
+            writefile(Config.LOCAL_UPDATE_FILE, scriptContent)
             self:saveLocalVersion(self.latestVersion)
             self.updateDownloaded = true
-            Logger.log("Atualização baixada: V" .. self.latestVersion)
-            Webhook.send("Atualização baixada: V" .. self.latestVersion)
-        fim)
-        retornar verdadeiro
-    fim
-    retornar falso
-fim
+            Logger.log("Update downloaded: V" .. self.latestVersion)
+            Webhook.send("Update downloaded: V" .. self.latestVersion)
+        end)
+        return true
+    end
+    return false
+end
 
-função UpdateSystem:loadScript()
-    local updateContent = nulo
-    pcall(função()
-        se isfile(Config.LOCAL_UPDATE_FILE) então
-            atualizarConteúdo = lerarquivo(Config.LOCAL_UPDATE_FILE)
-        fim
-    fim)
+function UpdateSystem:loadScript()
+    local updateContent = nil
+    pcall(function()
+        if isfile(Config.LOCAL_UPDATE_FILE) then
+            updateContent = readfile(Config.LOCAL_UPDATE_FILE)
+        end
+    end)
 
-    se updateContent e #updateContent > 100 então
+    if updateContent and #updateContent > 100 then
         pcall(function() writefile(Config.LOCAL_UPDATE_FILE, "") end)
-        self.versãoAtual = self.versãoMaisRecente
-        retornar carregarstring(atualizarConteúdo)
-    outro
-        conteúdo do script local = nulo
-        pcall(função()
+        self.currentVersion = self.latestVersion
+        return loadstring(updateContent)
+    else
+        local scriptContent = nil
+        pcall(function()
             scriptContent = game:HttpGet(Config.REPO_URL .. Config.SCRIPT_FILE)
-        fim)
-        se scriptContent e #scriptContent > 100 então
-            retornar carregarstring(conteúdo do script)
-        fim
-    fim
-    retornar nulo
-fim
+        end)
+        if scriptContent and #scriptContent > 100 then
+            return loadstring(scriptContent)
+        end
+    end
+    return nil
+end
 
--- ============================================
--- SISTEMA DE CHAVE (COM USERID)
--- ============================================
 local KeySystem = {}
 KeySystem.__index = KeySystem
 
-função KeySystem.new()
+function KeySystem.new()
     local self = setmetatable({}, KeySystem)
     self.keyFile = "scriptgogo_key.txt"
-    self.verificado = falso
+    self.verified = false
     self.retryAttempts = 0
     self.maxRetries = 5
     self.expiryHours = 24
-    self.currentUser = nulo
+    self.currentUser = nil
     self.userId = self:generateUserId()
-    self.isPermanent = falso
+    self.isPermanent = false
     self.permanentCache = {}
     self.lastPermanentCheck = 0
-    retornar a si mesmo
-fim
+    return self
+end
 
-função KeySystem:generateUserId()
-    userId local = ""
-    pcall(função()
-        jogador local = jogo.Jogadores.JogadorLocal
-        local accountId = player.UserId ou "desconhecido"
-        hwid local = "desconhecido"
-        se syn e syn.crypt então
-            hwid = syn.crypt.customhash("HWID") ou "desconhecido"
-        fim
+function KeySystem:generateUserId()
+    local userId = ""
+    pcall(function()
+        local player = game.Players.LocalPlayer
+        local accountId = player.UserId or "unknown"
+        local hwid = "unknown"
+        if syn and syn.crypt then
+            hwid = syn.crypt.customhash("HWID") or "unknown"
+        end
         local rawId = accountId .. "_" .. hwid
         userId = game:GetService("HttpService"):SHA512(rawId):sub(1, 16)
-    fim)
-    se userId == "" então
+    end)
+    if userId == "" then
         userId = game.Players.LocalPlayer.Name
-    fim
-    retornar userId
-fim
+    end
+    return userId
+end
 
-função KeySystem:isKeyExpired(savedData)
-    se saveData e saveData.isPermanent então
-        retornar falso
-    fim
-    se não houver dados salvos ou se a data de expiração de dados salvos não for válida, então
-        retornar verdadeiro
-    fim
-    retornar os.time() > savedData.expiryDate
-fim
+function KeySystem:isKeyExpired(savedData)
+    if savedData and savedData.isPermanent then
+        return false
+    end
+    if not savedData or not savedData.expiryDate then
+        return true
+    end
+    return os.time() > savedData.expiryDate
+end
 
-função KeySystem:saveUserKey(userId, key, expiryDate, isPermanent)
-    pcall(função()
-        dados locais = {
+function KeySystem:saveUserKey(userId, key, expiryDate, isPermanent)
+    pcall(function()
+        local data = {
             userId = userId,
-            chave = chave,
-            data = os.date("%Y-%m-%d %H:%M:%S"),
-            dataDeExpiração = dataDeExpiração ou (os.time() + (24 * 3600)),
-            isPermanent = isPermanent ou falso
+            key = key,
+            date = os.date("%Y-%m-%d %H:%M:%S"),
+            expiryDate = expiryDate or (os.time() + (24 * 3600)),
+            isPermanent = isPermanent or false
         }
         local json = game:GetService("HttpService"):JSONEncode(data)
-        escreverarquivo(self.keyFile, json)
-        Logger.log("Chave guardada: " .. (isPermanent e "PERMANENTE" ou "DIARIA"))
-    fim)
-fim
+        writefile(self.keyFile, json)
+        Logger.log("Key saved: " .. (isPermanent and "PERMANENT" or "DAILY"))
+    end)
+end
 
-função KeySystem:loadUserKey(userId)
-    resultado local = nulo
-    pcall(função()
-        se isfile(self.keyFile) então
-            conteúdo local = readfile(self.keyFile)
-            dados locais = jogo:GetService("HttpService"):JSONDecode(conteúdo)
-            Se data e data.userId == userId então
-                resultado = dados
-            fim
-        fim
-    fim)
-    retornar resultado
-fim
+function KeySystem:loadUserKey(userId)
+    local result = nil
+    pcall(function()
+        if isfile(self.keyFile) then
+            local content = readfile(self.keyFile)
+            local data = game:GetService("HttpService"):JSONDecode(content)
+            if data and data.userId == userId then
+                result = data
+            end
+        end
+    end)
+    return result
+end
 
-função KeySystem:isPermanentKey(chave)
-    se KeyConfig.USE_EXTERNAL_LIST então
-        local agora = os.time()
-        se agora - self.lastPermanentCheck > KeyConfig.EXTERNAL_LIST_CACHE então
-            self.lastPermanentCheck = agora
-            pcall(função()
-                conteúdo local = jogo:HttpGet(KeyConfig.PERMANENT_LIST_URL)
-                dados locais = jogo:GetService("HttpService"):JSONDecode(conteúdo)
-                se data e type(data) == "tabela" então
-                    self.permanentCache = dados
-                fim
-            fim)
-        fim
-        jogador local = jogo.Jogadores.JogadorLocal
+function KeySystem:isPermanentKey(key)
+    if KeyConfig.USE_EXTERNAL_LIST then
+        local now = os.time()
+        if now - self.lastPermanentCheck > KeyConfig.EXTERNAL_LIST_CACHE then
+            self.lastPermanentCheck = now
+            pcall(function()
+                local content = game:HttpGet(KeyConfig.PERMANENT_LIST_URL)
+                local data = game:GetService("HttpService"):JSONDecode(content)
+                if data and type(data) == "table" then
+                    self.permanentCache = data
+                end
+            end)
+        end
+        local player = game.Players.LocalPlayer
         local userId = tostring(player.UserId)
-        Se self.permanentCache[key] e self.permanentCache[key] == userId então
-            retornar verdadeiro
-        fim
-    fim
-    Se KeyConfig.USE_PREFIX e não KeyConfig.USE_EXTERNAL_LIST então
-        se string.sub(key, 1, #KeyConfig.PERMANENT_KEY_PREFIX) == KeyConfig.PERMANENT_KEY_PREFIX então
-            retornar verdadeiro
-        fim
-    fim
-    retornar falso
-fim
+        if self.permanentCache[key] and self.permanentCache[key] == userId then
+            return true
+        end
+    end
+    if KeyConfig.USE_PREFIX and not KeyConfig.USE_EXTERNAL_LIST then
+        if string.sub(key, 1, #KeyConfig.PERMANENT_KEY_PREFIX) == KeyConfig.PERMANENT_KEY_PREFIX then
+            return true
+        end
+    end
+    return false
+end
 
-função KeySystem:verifyWithLootlabs(chave)
-    se self:isPermanentKey(key) então
+function KeySystem:verifyWithLootlabs(key)
+    if self:isPermanentKey(key) then
         self.isPermanent = true
-        retornar verdadeiro
-    fim
-    se Lootlabs_Config não estiver habilitado, então
-        retornar falso
-    fim
-    sucesso local, resposta = pcall(função()
-        dados locais = { chave = chave, token_api = Lootlabs_Config.API_Key }
+        return true
+    end
+    if not Lootlabs_Config.Enabled then
+        return false
+    end
+    local success, response = pcall(function()
+        local data = { key = key, api_token = Lootlabs_Config.API_Key }
         local jsonData = game:GetService("HttpService"):JSONEncode(data)
-        se syn e syn.request então
-            retornar syn.request({
-                URL = Lootlabs_Config.API_URL,
-                Método = "POST",
-                Cabeçalhos = { ["Content-Type"] = "application/json" },
-                Corpo = dados JSON
+        if syn and syn.request then
+            return syn.request({
+                Url = Lootlabs_Config.API_URL,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = jsonData
             })
-        outro
-            retornar jogo:HttpGet(Lootlabs_Config.API_URL .. "?key=" .. key .. "&api_token=" .. Lootlabs_Config.API_Key)
-        fim
-    fim)
-    se for bem-sucedido, então
-        se type(response) == "string" então
-            local decodificado = jogo:GetService("HttpService"):JSONDecode(resposta)
-            retorna decodificado e decodificado.válido == verdadeiro
-        senão se resposta e resposta.StatusCode == 200 então
-            local decodificado = game:GetService("HttpService"):JSONDecode(response.Body)
-            retorna decodificado e decodificado.válido == verdadeiro
-        fim
-    fim
-    retornar falso
-fim
+        else
+            return game:HttpGet(Lootlabs_Config.API_URL .. "?key=" .. key .. "&api_token=" .. Lootlabs_Config.API_Key)
+        end
+    end)
+    if success then
+        if type(response) == "string" then
+            local decoded = game:GetService("HttpService"):JSONDecode(response)
+            return decoded and decoded.valid == true
+        elseif response and response.StatusCode == 200 then
+            local decoded = game:GetService("HttpService"):JSONDecode(response.Body)
+            return decoded and decoded.valid == true
+        end
+    end
+    return false
+end
 
-função KeySystem:showKeyUI()
-    -- (UI da key – mantida da versão anterior)
+function KeySystem:showKeyUI()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "KeySystem"
     screenGui.Parent = game:GetService("CoreGui")
@@ -438,9 +429,9 @@ função KeySystem:showKeyUI()
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     mainFrame.BorderSizePixel = 2
     mainFrame.BorderColor3 = Color3.fromRGB(255, 215, 0)
-    mainFrame.Parent = fundo
+    mainFrame.Parent = background
 
-    logotipo local = Instance.new("TextLabel")
+    local logo = Instance.new("TextLabel")
     logo.Size = UDim2.new(1, 0, 0, 45)
     logo.Position = UDim2.new(0, 0, 0, 10)
     logo.BackgroundTransparency = 1
@@ -454,7 +445,7 @@ função KeySystem:showKeyUI()
     userIdLabel.Size = UDim2.new(1, 0, 0, 25)
     userIdLabel.Position = UDim2.new(0, 0, 0, 60)
     userIdLabel.BackgroundTransparency = 1
-    userIdLabel.Text = "ID do usuário: " .. self.userId
+    userIdLabel.Text = "YOUR ID: " .. self.userId
     userIdLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     userIdLabel.TextSize = 13
     userIdLabel.Font = Enum.Font.GothamMedium
@@ -464,60 +455,60 @@ função KeySystem:showKeyUI()
     expiryLabel.Size = UDim2.new(1, 0, 0, 25)
     expiryLabel.Position = UDim2.new(0, 0, 0, 85)
     expiryLabel.BackgroundTransparency = 1
-    expiryLabel.Text = "TIPOS DE CHAVE: DIÁRIO (24H) OU PERMANENTE"
+    expiryLabel.Text = "KEY TYPES: DAILY (24H) OR PERMANENT"
     expiryLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
     expiryLabel.TextSize = 13
     expiryLabel.Font = Enum.Font.GothamBold
-    rótuloDeExpiração.Pai = quadroPrincipal
+    expiryLabel.Parent = mainFrame
 
     local dateLabel = Instance.new("TextLabel")
     dateLabel.Size = UDim2.new(1, 0, 0, 20)
     dateLabel.Position = UDim2.new(0, 0, 0, 110)
     dateLabel.BackgroundTransparency = 1
-    dateLabel.Text = "Data: " .. os.date("%d/%m/%Y %H:%M")
+    dateLabel.Text = "Date: " .. os.date("%d/%m/%Y %H:%M")
     dateLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
     dateLabel.TextSize = 12
     dateLabel.Font = Enum.Font.GothamMedium
     dateLabel.Parent = mainFrame
 
-    instruções locais = Instance.new("TextLabel")
-    instruções.Tamanho = UDim2.novo(1, 0, 0, 50)
-    instruções.Posição = UDim2.new(0, 0, 0, 135)
-    instruções.TransparênciaDeFundo = 1
-    instruções.Text = "INSIRA SUA KEY\n(Diário grátis via LootLabs ou compra permanente)"
-    instruções.TextColor3 = Color3.fromRGB(180, 180, 180)
-    instruções.TamanhoDoTexto = 14
-    instruções.Fonte = Enum.Fonte.GothamMedium
-    instruções.TextWrapped = true
-    instruções.Pai = mainFrame
+    local instructions = Instance.new("TextLabel")
+    instructions.Size = UDim2.new(1, 0, 0, 50)
+    instructions.Position = UDim2.new(0, 0, 0, 135)
+    instructions.BackgroundTransparency = 1
+    instructions.Text = "ENTER YOUR KEY\n(Daily free via LootLabs or Permanent purchased)"
+    instructions.TextColor3 = Color3.fromRGB(180, 180, 180)
+    instructions.TextSize = 14
+    instructions.Font = Enum.Font.GothamMedium
+    instructions.TextWrapped = true
+    instructions.Parent = mainFrame
 
     local getKeyBtn = Instance.new("TextButton")
     getKeyBtn.Size = UDim2.new(0.6, 0, 0, 35)
     getKeyBtn.Position = UDim2.new(0.2, 0, 0, 195)
     getKeyBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
     getKeyBtn.BorderSizePixel = 0
-    getKeyBtn.Text = "OBTER DIÁRIO DE CHAVE (LOOTLABS)"
+    getKeyBtn.Text = "GET DAILY KEY (LOOTLABS)"
     getKeyBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
     getKeyBtn.TextSize = 13
     getKeyBtn.Font = Enum.Font.GothamBold
     getKeyBtn.Parent = mainFrame
 
     getKeyBtn.MouseButton1Click:Connect(function()
-        se Lootlabs_Config.Link e Lootlabs_Config.Link ~= "" então
+        if Lootlabs_Config.Link and Lootlabs_Config.Link ~= "" then
             setclipboard(Lootlabs_Config.Link)
-            status.Text = "LINK COPIADO. ACESSE E OBTENHA SUA KEY DIARIA"
+            status.Text = "LINK COPIED. ACCESS AND GET YOUR DAILY KEY"
             status.TextColor3 = Color3.fromRGB(0, 255, 100)
-        outro
-            status.Text = "ERRO: LINK DO LOOTLABS NÃO CONFIGURADO"
+        else
+            status.Text = "ERROR: LOOTLABS LINK NOT CONFIGURED"
             status.TextColor3 = Color3.fromRGB(255, 80, 80)
-        fim
-    fim)
+        end
+    end)
 
     local permInfo = Instance.new("TextLabel")
     permInfo.Size = UDim2.new(1, 0, 0, 25)
     permInfo.Position = UDim2.new(0, 0, 0, 240)
     permInfo.BackgroundTransparency = 1
-    permInfo.Text = "KEY PERMANENTE: Compre e receba uma chave única"
+    permInfo.Text = "PERMANENT KEY: Buy and receive a unique key"
     permInfo.TextColor3 = Color3.fromRGB(200, 200, 200)
     permInfo.TextSize = 12
     permInfo.Font = Enum.Font.GothamMedium
@@ -533,7 +524,7 @@ função KeySystem:showKeyUI()
     textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     textBox.TextSize = 18
     textBox.Font = Enum.Font.GothamMedium
-    textBox.PlaceholderText = "Cole sua chave aqui..."
+    textBox.PlaceholderText = "Paste your key here..."
     textBox.ClearTextOnFocus = false
     textBox.Parent = mainFrame
 
@@ -542,17 +533,17 @@ função KeySystem:showKeyUI()
     verifyBtn.Position = UDim2.new(0.3, 0, 0, 335)
     verifyBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
     verifyBtn.BorderSizePixel = 0
-    verifyBtn.Text = "VERIFICAR"
-    verificarBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
-    tamanhoTexto do botão de verificação = 18
+    verifyBtn.Text = "VERIFY"
+    verifyBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    verifyBtn.TextSize = 18
     verifyBtn.Font = Enum.Font.GothamBold
     verifyBtn.Parent = mainFrame
 
-    status local = Instance.new("TextLabel")
+    local status = Instance.new("TextLabel")
     status.Size = UDim2.new(1, 0, 0, 30)
     status.Position = UDim2.new(0, 0, 0, 395)
     status.BackgroundTransparency = 1
-    status.Text = "Aguardando chave..."
+    status.Text = "Waiting for key..."
     status.TextColor3 = Color3.fromRGB(200, 200, 200)
     status.TextSize = 14
     status.Font = Enum.Font.GothamMedium
@@ -562,7 +553,7 @@ função KeySystem:showKeyUI()
     retryInfo.Size = UDim2.new(1, 0, 0, 25)
     retryInfo.Position = UDim2.new(0, 0, 0, 430)
     retryInfo.BackgroundTransparency = 1
-    retryInfo.Text = "Tentativas: 0/5"
+    retryInfo.Text = "Attempts: 0/5"
     retryInfo.TextColor3 = Color3.fromRGB(150, 150, 150)
     retryInfo.TextSize = 12
     retryInfo.Font = Enum.Font.GothamMedium
@@ -572,54 +563,54 @@ função KeySystem:showKeyUI()
     validInfo.Size = UDim2.new(1, 0, 0, 20)
     validInfo.Position = UDim2.new(0, 0, 0, 460)
     validInfo.BackgroundTransparency = 1
-    validInfo.Text = "Chave diária 24h | Permanente nunca expira"
+    validInfo.Text = "Daily key 24h | Permanent never expires"
     validInfo.TextColor3 = Color3.fromRGB(100, 100, 100)
     validInfo.TextSize = 11
     validInfo.Font = Enum.Font.GothamMedium
     validInfo.Parent = mainFrame
 
-    função local verifyKey(chave)
-        se não houver chave ou chave == "" então
-            status.Text = "Digite uma chave válida."
+    local function verifyKey(key)
+        if not key or key == "" then
+            status.Text = "Enter a valid key."
             status.TextColor3 = Color3.fromRGB(255, 80, 80)
-            retornar falso
-        fim
+            return false
+        end
 
-        status.Text = "Verificando chave..."
+        status.Text = "Verifying key..."
         status.TextColor3 = Color3.fromRGB(255, 215, 0)
 
-        local isValid = falso
-        local isPermanent = falso
+        local isValid = false
+        local isPermanent = false
 
-        isPermanent = self:isPermanentKey(chave)
+        isPermanent = self:isPermanentKey(key)
 
-        Se Lootlabs_Config.Enabled e não isPermanent então
-            local verificado = self:verifyWithLootlabs(chave)
-            se verificado então
-                é válido = verdadeiro
-            fim
-        senão se for permanente então
-            é válido = verdadeiro
-        fim
+        if Lootlabs_Config.Enabled and not isPermanent then
+            local verified = self:verifyWithLootlabs(key)
+            if verified then
+                isValid = true
+            end
+        elseif isPermanent then
+            isValid = true
+        end
 
-        se isValid então
-            self.verificado = verdadeiro
-            self.usuárioAtual = self.idDoUsuário
+        if isValid then
+            self.verified = true
+            self.currentUser = self.userId
             self.isPermanent = isPermanent
-            local dataDeExpiração = isPermanent e 0 ou (os.time() + (24 * 3600))
+            local expiryDate = isPermanent and 0 or (os.time() + (24 * 3600))
             self:saveUserKey(self.userId, key, expiryDate, isPermanent)
-            status.Text = isPermanent e "KEY PERMANENTE VALIDA. (Nunca expira)" ou "KEY DIARIA VALIDA. (24h)"
+            status.Text = isPermanent and "PERMANENT KEY VALID. (Never expires)" or "DAILY KEY VALID. (24h)"
             status.TextColor3 = Color3.fromRGB(0, 255, 100)
-            aguarde(0.8)
-            screenGui:Destruir()
-            retornar verdadeiro
-        outro
+            wait(0.8)
+            screenGui:Destroy()
+            return true
+        else
             self.retryAttempts = self.retryAttempts + 1
-            retryInfo.Text = "Tentativas: " .. self.retryAttempts .. "/5"
-            status.Text = "CHAVE INVÁLIDA. Tente novamente."
+            retryInfo.Text = "Attempts: " .. self.retryAttempts .. "/5"
+            status.Text = "INVALID KEY. Try again."
             status.TextColor3 = Color3.fromRGB(255, 80, 80)
-            se self.retryAttempts >= 5 então
-                status.Text = "Muitas tentativas de falhas."
+            if self.retryAttempts >= 5 then
+                status.Text = "Too many failed attempts."
                 status.TextColor3 = Color3.fromRGB(255, 80, 80)
                 verifyBtn.Visible = false
                 textBox.Visible = false
@@ -628,107 +619,104 @@ função KeySystem:showKeyUI()
                 closeBtn.Position = UDim2.new(0.3, 0, 0, 335)
                 closeBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
                 closeBtn.BorderSizePixel = 0
-                closeBtn.Text = "FECHAR"
+                closeBtn.Text = "CLOSE"
                 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
                 closeBtn.TextSize = 16
                 closeBtn.Font = Enum.Font.GothamBold
                 closeBtn.Parent = mainFrame
                 closeBtn.MouseButton1Click:Connect(function()
-                    screenGui:Destruir()
-                fim)
-            fim
-            retornar falso
-        fim
-    fim
+                    screenGui:Destroy()
+                end)
+            end
+            return false
+        end
+    end
 
     verifyBtn.MouseButton1Click:Connect(function()
-        chave local = textBox.Text
-        verificarChave(chave)
-    fim)
+        local key = textBox.Text
+        verifyKey(key)
+    end)
 
     textBox.FocusLost:Connect(function(enterPressed)
-        se EnterPressionado então
-            chave local = textBox.Text
-            verificarChave(chave)
-        fim
-    fim)
+        if enterPressed then
+            local key = textBox.Text
+            verifyKey(key)
+        end
+    end)
 
     local savedData = self:loadUserKey(self.userId)
-    se savedData então
-        se não self:isKeyExpired(savedData) então
+    if savedData then
+        if not self:isKeyExpired(savedData) then
             textBox.Text = savedData.key
-            aguarde(0,5)
-            verificarChave(dados salvos.chave)
-        outro
-            status.Text = saveData.isPermanent e "KEY PERMANENTE EXPIRADA? (Erro)" ou "KEY DIARIA EXPIRADA. Pegue uma nova."
+            wait(0.5)
+            verifyKey(savedData.key)
+        else
+            status.Text = savedData.isPermanent and "PERMANENT KEY EXPIRED? (Error)" or "DAILY KEY EXPIRED. Get a new one."
             status.TextColor3 = Color3.fromRGB(255, 200, 0)
-        fim
-    fim
+        end
+    end
 
-    retornar screenGui
-fim
+    return screenGui
+end
 
-função KeySystem:verificar()
-    Se self.verified então retorne verdadeiro fim
+function KeySystem:verify()
+    if self.verified then return true end
 
     local savedData = self:loadUserKey(self.userId)
-    se savedData então
-        se não self:isKeyExpired(savedData) então
-            local verificado = falso
-            se savedData.isPermanent então
-                verificado = verdadeiro
-            senão se Lootlabs_Config.Enabled então
-                verificado = self:verifyWithLootlabs(savedData.key)
-            fim
-            se verificado então
-                self.verificado = verdadeiro
-                self.isPermanent=salvoData.isPermanent
-                retornar verdadeiro
-            fim
-        outro
-            print("Chave expirada. Pegue uma nova.")
-            Logger.log("Chave expirada para usuário " .. self.userId)
-        fim
-    fim
+    if savedData then
+        if not self:isKeyExpired(savedData) then
+            local verified = false
+            if savedData.isPermanent then
+                verified = true
+            elseif Lootlabs_Config.Enabled then
+                verified = self:verifyWithLootlabs(savedData.key)
+            end
+            if verified then
+                self.verified = true
+                self.isPermanent = savedData.isPermanent
+                return true
+            end
+        else
+            print("Key expired. Get a new one.")
+            Logger.log("Key expired for user " .. self.userId)
+        end
+    end
 
     self:showKeyUI()
 
-    embora não seja autoverificado
-        aguarde(0,5)
-    fim
+    while not self.verified do
+        wait(0.5)
+    end
 
-    retornar self.verificado
-fim
+    return self.verified
+end
 
--- ============================================
--- GERADOR AUTOMÁTICO DE CHAVES PERMANENTES (MODO ADMIN)
--- ============================================
 local KeyGenerator = {}
 KeyGenerator.__index = KeyGenerator
 
-função KeyGenerator.new()
+function KeyGenerator.new()
     local self = setmetatable({}, KeyGenerator)
-    retornar a si mesmo
-fim
+    return self
+end
 
-função KeyGenerator:generateRandomString(comprimento)
-    caracteres locais = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    resultado local = ""
+function KeyGenerator:generateRandomString(length)
+    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    local result = ""
     math.randomseed(os.time() + math.random(1, 99999))
-    para i = 1, comprimento faça
+    for i = 1, length do
         local idx = math.random(1, #chars)
-        resultado = resultado .. string.sub(chars, idx, idx)
-    fim
-    retornar resultado
-fim
+        result = result .. string.sub(chars, idx, idx)
+    end
+    return result
+end
 
-função KeyGenerator:generateKey()
-    prefixo local = KeyConfig.PERMANENT_KEY_PREFIX
+function KeyGenerator:generateKey()
+    local prefix = KeyConfig.PERMANENT_KEY_PREFIX
     local randomPart = self:generateRandomString(8)
-    retornar prefixo .. parteAleatória
-fim
+    return prefix .. randomPart
+end
 
-função KeyGenerator:showAdminUI()
+function KeyGenerator:showAdminUI()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AdminKeyGenerator"
     screenGui.Parent = game:GetService("CoreGui")
@@ -747,28 +735,28 @@ função KeyGenerator:showAdminUI()
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     mainFrame.BorderSizePixel = 2
     mainFrame.BorderColor3 = Color3.fromRGB(255, 215, 0)
-    mainFrame.Parent = fundo
+    mainFrame.Parent = background
 
-    título local = Instance.new("TextLabel")
-    título.Tamanho = UDim2.novo(1, 0, 0, 45)
-    título.Posição = UDim2.new(0, 0, 0, 10)
-    título.TransparênciaDeFundo = 1
-    title.Text = "GERADOR DE CHAVES PERMANENTES"
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 45)
+    title.Position = UDim2.new(0, 0, 0, 10)
+    title.BackgroundTransparency = 1
+    title.Text = "PERMANENT KEY GENERATOR"
     title.TextColor3 = Color3.fromRGB(255, 215, 0)
-    título.TamanhoDoTexto = 24
-    título.Fonte = Enum.Fonte.GothamBold
-    título.Pai = mainFrame
+    title.TextSize = 24
+    title.Font = Enum.Font.GothamBold
+    title.Parent = mainFrame
 
     local labelUserId = Instance.new("TextLabel")
-    rótuloUserId.Size = UDim2.new(1, -20, 0, 25)
+    labelUserId.Size = UDim2.new(1, -20, 0, 25)
     labelUserId.Position = UDim2.new(0, 10, 0, 65)
     labelUserId.BackgroundTransparency = 1
-    labelUserId.Text = "UserId do comprador:"
+    labelUserId.Text = "Buyer UserId:"
     labelUserId.TextColor3 = Color3.fromRGB(200, 200, 200)
     labelUserId.TextSize = 14
     labelUserId.Font = Enum.Font.GothamMedium
     labelUserId.TextXAlignment = Enum.TextXAlignment.Left
-    rótuloUserId.Parent = mainFrame
+    labelUserId.Parent = mainFrame
 
     local textBoxUserId = Instance.new("TextBox")
     textBoxUserId.Size = UDim2.new(0.8, 0, 0, 40)
@@ -780,17 +768,17 @@ função KeyGenerator:showAdminUI()
     textBoxUserId.TextColor3 = Color3.fromRGB(255, 255, 255)
     textBoxUserId.TextSize = 18
     textBoxUserId.Font = Enum.Font.GothamMedium
-    textBoxUserId.PlaceholderText = "Insira o UserId do comprador"
+    textBoxUserId.PlaceholderText = "Enter buyer UserId"
     textBoxUserId.ClearTextOnFocus = false
     textBoxUserId.Parent = mainFrame
 
     local generateBtn = Instance.new("TextButton")
     generateBtn.Size = UDim2.new(0.6, 0, 0, 45)
     generateBtn.Position = UDim2.new(0.2, 0, 0, 155)
-    gerarBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+    generateBtn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
     generateBtn.BorderSizePixel = 0
-    generateBtn.Text = "GERAR CHAVE"
-    gerarBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    generateBtn.Text = "GENERATE KEY"
+    generateBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
     generateBtn.TextSize = 18
     generateBtn.Font = Enum.Font.GothamBold
     generateBtn.Parent = mainFrame
@@ -799,7 +787,7 @@ função KeyGenerator:showAdminUI()
     resultLabel.Size = UDim2.new(1, -20, 0, 30)
     resultLabel.Position = UDim2.new(0, 10, 0, 215)
     resultLabel.BackgroundTransparency = 1
-    resultLabel.Text = "Aguardando geração..."
+    resultLabel.Text = "Waiting for generation..."
     resultLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     resultLabel.TextSize = 14
     resultLabel.Font = Enum.Font.GothamMedium
@@ -811,7 +799,7 @@ função KeyGenerator:showAdminUI()
     copyBtn.Position = UDim2.new(0.3, 0, 0, 260)
     copyBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
     copyBtn.BorderSizePixel = 0
-    copyBtn.Text = "COPIAR CHAVE"
+    copyBtn.Text = "COPY KEY"
     copyBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
     copyBtn.TextSize = 14
     copyBtn.Font = Enum.Font.GothamBold
@@ -823,7 +811,7 @@ função KeyGenerator:showAdminUI()
     closeBtn.Position = UDim2.new(0.8, 0, 0, 260)
     closeBtn.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
     closeBtn.BorderSizePixel = 0
-    closeBtn.Text = "FECHAR"
+    closeBtn.Text = "CLOSE"
     closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     closeBtn.TextSize = 14
     closeBtn.Font = Enum.Font.GothamBold
@@ -833,163 +821,148 @@ função KeyGenerator:showAdminUI()
 
     generateBtn.MouseButton1Click:Connect(function()
         local userId = textBoxUserId.Text
-        se userId == "" então
-            resultLabel.Text = "ERRO: Insira um UserId válido."
+        if userId == "" then
+            resultLabel.Text = "ERROR: Enter a valid UserId."
             resultLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
-            retornar
-        fim
+            return
+        end
 
-        -- Chave Gerar
-        chave local = self:generateKey()
-        chaveGerada = chave
+        local key = self:generateKey()
+        generatedKey = key
 
-        resultLabel.Text = "Chave gerada: " .. key .. " (associada ao UserId " .. userId .. ")"
+        resultLabel.Text = "Key generated: " .. key .. " (linked to UserId " .. userId .. ")"
         resultLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
         copyBtn.Visible = true
 
-        -- Copiar automaticamente
-        definirá a área de transferência (tecla)
-        resultLabel.Text = resultLabel.Text .. "\n(Chave copiada para a área de transferência)"
+        setclipboard(key)
+        resultLabel.Text = resultLabel.Text .. "\n(Key copied to clipboard)"
 
-        -- Instruções adicionais
-        aguarde(0,5)
-        resultLabel.Text = resultLabel.Text .. "\n\nAdicione ao perm_keys.json:\n\"" .. key .. "\": \"" .. userId .. "\""
-    fim)
+        wait(0.5)
+        resultLabel.Text = resultLabel.Text .. "\n\nAdd to perm_keys.json:\n\"" .. key .. "\": \"" .. userId .. "\""
+    end)
 
     copyBtn.MouseButton1Click:Connect(function()
-        se generatedKey então
-            definiráaáreadetransferência(chavegerada)
-            resultLabel.Text = "Chave copiada novamente."
-        fim
-    fim)
+        if generatedKey then
+            setclipboard(generatedKey)
+            resultLabel.Text = "Key copied again."
+        end
+    end)
 
     closeBtn.MouseButton1Click:Connect(function()
-        screenGui:Destruir()
-        print("Modo administrador encerrado. Execute o script novamente para usar o modo normal.")
-    fim)
-fim
+        screenGui:Destroy()
+        print("Admin mode closed. Run script again for normal mode.")
+    end)
+end
 
--- ============================================
--- SISTEMA DE CACHE
--- ============================================
 local Cache = {}
 Cache.__index = Cache
 
-função Cache.new()
+function Cache.new()
     local self = setmetatable({}, Cache)
-    self.dados = {
+    self.data = {
         beli = 0,
-        domínio = {},
-        nível = 0,
-        fragmentos = 0,
+        mastery = {},
+        level = 0,
+        fragments = 0,
     }
     self.lastUpdate = 0
     self.ttl = 2
-    retornar a si mesmo
-fim
+    return self
+end
 
-função Cache:getBeli(agente)
-    local agora = os.time()
-    se agora - self.lastUpdate > self.ttl então
-        self.data.beli = agente:getBeli()
-        para _, estilo em ipairs(agent.fightingStyles) faça
+function Cache:getBeli(agent)
+    local now = os.time()
+    if now - self.lastUpdate > self.ttl then
+        self.data.beli = agent:getBeli()
+        for _, style in ipairs(agent.fightingStyles) do
             self.data.mastery[style.name] = agent:getStyleMastery(style.name)
-        fim
+        end
         self.data.level = agent.state.level
         self.data.fragments = agent.state.fragments
-        self.lastUpdate = agora
-    fim
-    retornar self.data.beli
-fim
+        self.lastUpdate = now
+    end
+    return self.data.beli
+end
 
-função Cache:getMastery(styleName)
-    retornar self.data.mastery[styleName] ou 0
-fim
+function Cache:getMastery(styleName)
+    return self.data.mastery[styleName] or 0
+end
 
--- ============================================
--- BYPASS ANTI-CHEAT
--- ============================================
 local AntiCheat = {}
 AntiCheat.__index = AntiCheat
 
-função AntiCheat.new()
+function AntiCheat.new()
     local self = setmetatable({}, AntiCheat)
     self.delayBase = 0.08
     self.delayVariation = 0.04
-    retornar a si mesmo
-fim
+    return self
+end
 
-função AntiCheat:obterAtrasoAleatório()
-    retornar self.delayBase + math.random() * self.delayVariation
-fim
+function AntiCheat:getRandomDelay()
+    return self.delayBase + math.random() * self.delayVariation
+end
 
-função AntiCheat:humanizarAção(callback)
-    pcall(função()
-        atraso local = self:getRandomDelay()
-        aguarde(atraso)
-        se math.random(1, 10) == 1 então
-            aguarde(math.random(1, 5) * 0.01)
-        fim
-        ligar de volta()
-    fim)
-fim
+function AntiCheat:humanizeAction(callback)
+    pcall(function()
+        local delay = self:getRandomDelay()
+        wait(delay)
+        if math.random(1, 10) == 1 then
+            wait(math.random(1, 5) * 0.01)
+        end
+        callback()
+    end)
+end
 
--- ============================================
--- OTIMIZAÃ‡ÃƒO
--- ============================================
-função local optimizeGame()
-    pcall(função()
-        print("Aplicando otimizações...")
-        iluminação local = jogo:GetService("Iluminação")
-        se houver iluminação então
-            iluminação.FimDaNévoa = 100000
-            iluminação.InícioDaNévoa = 100000
-            iluminação.FogColor = Color3.fromRGB(0, 0, 0)
-            iluminação.Ambiente = Cor3.deRGB(100, 100, 100)
-            iluminação.Brilho = 1
-            iluminação.SombrasGlobais = falso
-            iluminação.ClockTime = 12
-        fim
-        para _, v em pares(iluminação:GetChildren()) faça
-            se v:IsA("Atmosfera") então v:Destruir() fim
-        fim
-        configurações locais = Configurações do Usuário()
-        qualidade local = configurações:GetService("UserGameSettings")
-        se for qualidade então
-            qualidade.MasterVolume = 0
+local function optimizeGame()
+    pcall(function()
+        print("Applying optimizations...")
+        local lighting = game:GetService("Lighting")
+        if lighting then
+            lighting.FogEnd = 100000
+            lighting.FogStart = 100000
+            lighting.FogColor = Color3.fromRGB(0, 0, 0)
+            lighting.Ambient = Color3.fromRGB(100, 100, 100)
+            lighting.Brightness = 1
+            lighting.GlobalShadows = false
+            lighting.ClockTime = 12
+        end
+        for _, v in pairs(lighting:GetChildren()) do
+            if v:IsA("Atmosphere") then v:Destroy() end
+        end
+        local settings = UserSettings()
+        local quality = settings:GetService("UserGameSettings")
+        if quality then
+            quality.MasterVolume = 0
             quality.QualityLevel = 1
-        fim
-        para _, v em pares(game.Workspace:GetDescendants()) faça
-            se v:IsA("ParticleEmitter") ou v:IsA("Trail") ou v:IsA("Smoke") ou v:IsA("Fire") então
-                v.Ativado = falso
-            fim
-            se v:IsA("Decalque") e não v.Name:find("Importante") então
-                v:Destruir()
-            fim
-        fim
-        coletarlixo()
-        print("Otimizações aplicadas.")
-        Logger.log("Otimizações aplicadas.")
-    fim)
-fim
+        end
+        for _, v in pairs(game.Workspace:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                v.Enabled = false
+            end
+            if v:IsA("Decal") and not v.Name:find("Important") then
+                v:Destroy()
+            end
+        end
+        collectgarbage()
+        print("Optimizations applied.")
+        Logger.log("Optimizations applied.")
+    end)
+end
 
--- ============================================
--- GUI COMPLETA (ABAS, BARRAS, BOTÃ•ES, LOGS)
--- ============================================
-GUI local = {}
+local GUI = {}
 GUI.__index = GUI
 
-função GUI.new(agente)
+function GUI.new(agent)
     local self = setmetatable({}, GUI)
-    self.agente = agente
-    self.created = falso
-    self.paused = falso
+    self.agent = agent
+    self.created = false
+    self.paused = false
     self.logs = {}
-    retornar a si mesmo
-fim
+    return self
+end
 
-função GUI:criar()
-    se self.created então retorne fim
+function GUI:create()
+    if self.created then return end
     self.created = true
 
     local screenGui = Instance.new("ScreenGui")
@@ -1009,39 +982,37 @@ função GUI:criar()
     mainFrame.Parent = screenGui
     self.mainFrame = mainFrame
 
-    -- Cabeceira
-    cabeçalho local = Instance.new("Frame")
+    local header = Instance.new("Frame")
     header.Size = UDim2.new(1, 0, 0, 40)
-    cabeçalho.CorDeFundo3 = Cor3.fromRGB(255, 200, 0)
+    header.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
     header.BackgroundTransparency = 0.1
     header.BorderSizePixel = 0
-    cabeçalho.Pai = mainFrame
+    header.Parent = mainFrame
 
-    título local = Instance.new("TextLabel")
-    título.Tamanho = UDim2.novo(0.6, 0, 1, 0)
-    título.Posição = UDim2.new(0, 10, 0, 0)
-    título.TransparênciaDeFundo = 1
-    título.Texto = "SCRIPT GOGO - IA"
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(0.6, 0, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "SCRIPT GOGO - AI"
     title.TextColor3 = Color3.fromRGB(255, 215, 0)
-    título.TamanhoDoTexto = 16
-    título.Fonte = Enum.Fonte.GothamBold
-    título.TextXAlignment = Enum.TextXAlignment.Left
-    título.Pai = cabeçalho
+    title.TextSize = 16
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
 
     local statusLabel = Instance.new("TextLabel")
     statusLabel.Name = "StatusLabel"
     statusLabel.Size = UDim2.new(0.3, 0, 1, 0)
     statusLabel.Position = UDim2.new(0.7, 0, 0, 0)
     statusLabel.BackgroundTransparency = 1
-    statusLabel.Text = "ATIVO"
+    statusLabel.Text = "ACTIVE"
     statusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
     statusLabel.TextSize = 12
     statusLabel.Font = Enum.Font.GothamBold
     statusLabel.TextXAlignment = Enum.TextXAlignment.Right
-    statusLabel.Parent = cabeçalho
+    statusLabel.Parent = header
     self.statusLabel = statusLabel
 
-    -- Abas
     local tabContainer = Instance.new("Frame")
     tabContainer.Size = UDim2.new(1, 0, 0, 30)
     tabContainer.Position = UDim2.new(0, 0, 0, 40)
@@ -1049,14 +1020,14 @@ função GUI:criar()
     tabContainer.BorderSizePixel = 0
     tabContainer.Parent = mainFrame
 
-    local tabs = {"Estado", "Estatísticas", "Controles"}
+    local tabs = {"Status", "Stats", "Controls"}
     self.tabButtons = {}
-    para i, nome em ipairs(tabs) faça
+    for i, name in ipairs(tabs) do
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1/#tabs, 0, 1, 0)
         btn.Position = UDim2.new((i-1)/#tabs, 0, 0, 0)
         btn.BackgroundTransparency = 1
-        btn.Text = nome
+        btn.Text = name
         btn.TextColor3 = Color3.fromRGB(200, 200, 200)
         btn.TextSize = 13
         btn.Font = Enum.Font.GothamMedium
@@ -1066,16 +1037,15 @@ função GUI:criar()
         underline.Size = UDim2.new(0.8, 0, 0, 2)
         underline.Position = UDim2.new(0.1, 0, 1, -2)
         underline.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
-        underline.BackgroundTransparency = i == 1 e 0 ou 1
+        underline.BackgroundTransparency = i == 1 and 0 or 1
         underline.BorderSizePixel = 0
-        sublinhado.Pai = btn
+        underline.Parent = btn
         self.tabButtons[i] = {btn = btn, underline = underline}
         btn.MouseButton1Click:Connect(function()
             self:switchTab(i)
-        fim)
-    fim
+        end)
+    end
 
-    -- Área de conteúdo
     local contentFrame = Instance.new("Frame")
     contentFrame.Size = UDim2.new(1, 0, 1, -100)
     contentFrame.Position = UDim2.new(0, 0, 0, 70)
@@ -1091,7 +1061,6 @@ função GUI:criar()
     self:createControlsPanel(contentFrame)
     self:switchTab(1)
 
-    -- Ã rea de toras
     local logFrame = Instance.new("Frame")
     logFrame.Size = UDim2.new(1, 0, 0, 80)
     logFrame.Position = UDim2.new(0, 0, 1, -80)
@@ -1113,73 +1082,73 @@ função GUI:criar()
     self.logContainer.Size = UDim2.new(1, 0, 0, 0)
     self.logContainer.BackgroundTransparency = 1
     self.logContainer.Parent = logScroll
-fim
+end
 
-função GUI:switchTab(índice)
-    para i, painel em ipairs(self.painéis) faça
-        se painel então painel.Visível = (i == índice) fim
-    fim
-    para i, tab em ipairs(self.tabButtons) faça
-        tab.underline.BackgroundTransparency = (i == index) e 0 ou 1
-    fim
-fim
+function GUI:switchTab(index)
+    for i, panel in ipairs(self.panels) do
+        if panel then panel.Visible = (i == index) end
+    end
+    for i, tab in ipairs(self.tabButtons) do
+        tab.underline.BackgroundTransparency = (i == index) and 0 or 1
+    end
+end
 
-função GUI:createStatePanel(pai)
-    painel local = Instance.new("Frame")
+function GUI:createStatePanel(parent)
+    local panel = Instance.new("Frame")
     panel.Size = UDim2.new(1, 0, 1, 0)
-    painel.TransparênciaDeFundo = 1
-    painel.Visível = falso
-    painel.Pai = pai
-    tabela.inserir(self.painéis, painel)
+    panel.BackgroundTransparency = 1
+    panel.Visible = false
+    panel.Parent = parent
+    table.insert(self.panels, panel)
 
     local y = 10
-    função local adicionarRótulo(texto, cor, tamanho, negrito)
+    local function addLabel(text, color, size, bold)
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(1, -20, 0, 22)
         lbl.Position = UDim2.new(0, 10, 0, y)
         lbl.BackgroundTransparency = 1
-        lbl.Texto = texto
-        lbl.TextColor3 = cor ou Color3.fromRGB(220, 220, 220)
-        lbl.TextSize = tamanho ou 13
-        lbl.Font = negrito e Enum.Font.GothamBold ou Enum.Font.GothamMedium
+        lbl.Text = text
+        lbl.TextColor3 = color or Color3.fromRGB(220, 220, 220)
+        lbl.TextSize = size or 13
+        lbl.Font = bold and Enum.Font.GothamBold or Enum.Font.GothamMedium
         lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.Parent = painel
+        lbl.Parent = panel
         y = y + 26
-        retornar lbl
-    fim
+        return lbl
+    end
 
     self.stateLabels = {}
-    self.stateLabels.decision = addLabel("Decisão: Aguardando...", Color3.fromRGB(255, 200, 0), 14, true)
-    self.stateLabels.level = addLabel("Nível: 1 / 2800", Color3.fromRGB(255, 255, 255))
-    self.stateLabels.fragments = addLabel("Fragmentos: 0 / 16500", Color3.fromRGB(255, 255, 255))
+    self.stateLabels.decision = addLabel("Decision: Waiting...", Color3.fromRGB(255, 200, 0), 14, true)
+    self.stateLabels.level = addLabel("Level: 1 / 2800", Color3.fromRGB(255, 255, 255))
+    self.stateLabels.fragments = addLabel("Fragments: 0 / 16500", Color3.fromRGB(255, 255, 255))
     self.stateLabels.beli = addLabel("Beli: 0", Color3.fromRGB(255, 200, 0))
-    self.stateLabels.style = addLabel("Estilo: Nenhum", Color3.fromRGB(255, 255, 255))
-    self.stateLabels.mastery = addLabel("Domínio: 0", Color3.fromRGB(255, 255, 255))
-    self.stateLabels.godhuman = addLabel("GodHuman: BLOQUEADO", Color3.fromRGB(255, 80, 80))
-    self.stateLabels.uptime = addLabel("Tempo: 0s", Color3.fromRGB(200, 200, 200), 12, false)
-    self.stateLabels.boost = addLabel("2x XP: INATIVO", Color3.fromRGB(255, 200, 0), 12, false)
-fim
+    self.stateLabels.style = addLabel("Style: None", Color3.fromRGB(255, 255, 255))
+    self.stateLabels.mastery = addLabel("Mastery: 0", Color3.fromRGB(255, 255, 255))
+    self.stateLabels.godhuman = addLabel("GodHuman: LOCKED", Color3.fromRGB(255, 80, 80))
+    self.stateLabels.uptime = addLabel("Uptime: 0s", Color3.fromRGB(200, 200, 200), 12, false)
+    self.stateLabels.boost = addLabel("2x XP: INACTIVE", Color3.fromRGB(255, 200, 0), 12, false)
+end
 
-função GUI:criarPainelDeEstatísticas(pai)
-    painel local = Instance.new("Frame")
+function GUI:createStatsPanel(parent)
+    local panel = Instance.new("Frame")
     panel.Size = UDim2.new(1, 0, 1, 0)
-    painel.TransparênciaDeFundo = 1
-    painel.Visível = falso
-    painel.Pai = pai
-    tabela.inserir(self.painéis, painel)
+    panel.BackgroundTransparency = 1
+    panel.Visible = false
+    panel.Parent = parent
+    table.insert(self.panels, panel)
 
     local y = 10
-    função local adicionarProgresso(rótulo, valor, máximo, cor)
+    local function addProgress(label, value, max, color)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, -20, 0, 28)
         frame.Position = UDim2.new(0, 10, 0, y)
         frame.BackgroundTransparency = 1
-        frame.Parent = painel
+        frame.Parent = panel
 
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(0.4, 0, 1, 0)
         lbl.BackgroundTransparency = 1
-        lbl.Texto = rótulo
+        lbl.Text = label
         lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
         lbl.TextSize = 12
         lbl.Font = Enum.Font.GothamMedium
@@ -1195,9 +1164,9 @@ função GUI:criarPainelDeEstatísticas(pai)
 
         local bar = Instance.new("Frame")
         bar.Size = UDim2.new(0, 0, 1, 0)
-        bar.BackgroundColor3 = cor ou Color3.fromRGB(255, 200, 0)
+        bar.BackgroundColor3 = color or Color3.fromRGB(255, 200, 0)
         bar.BorderSizePixel = 0
-        barra.Pai = fundo
+        bar.Parent = bg
 
         local val = Instance.new("TextLabel")
         val.Size = UDim2.new(0.5, 0, 1, 0)
@@ -1211,87 +1180,87 @@ função GUI:criarPainelDeEstatísticas(pai)
         val.Parent = frame
 
         y = y + 32
-        retornar {barra = barra, val = val, max = max, label = label}
-    fim
+        return {bar = bar, val = val, max = max, label = label}
+    end
 
     self.statsBars = {}
     self.statsBars.level = addProgress("Level", 1, 2800, Color3.fromRGB(255, 200, 0))
-    self.statsBars.fragments = addProgress("Fragmentos", 0, 16500, Color3.fromRGB(0, 200, 255))
+    self.statsBars.fragments = addProgress("Fragments", 0, 16500, Color3.fromRGB(0, 200, 255))
     self.statsBars.combat = addProgress("Combat", 0, 1, Color3.fromRGB(200, 200, 200))
     self.statsBars.water = addProgress("Water Kung Fu", 0, 500, Color3.fromRGB(100, 200, 255))
     self.statsBars.electric = addProgress("Electric", 0, 500, Color3.fromRGB(255, 200, 0))
-    self.statsBars.dragon = addProgress("Sopro de Dragão", 0, 500, Color3.fromRGB(255, 100, 50))
+    self.statsBars.dragon = addProgress("Dragon Breath", 0, 500, Color3.fromRGB(255, 100, 50))
     self.statsBars.superhuman = addProgress("Superhuman", 0, 400, Color3.fromRGB(0, 255, 100))
     self.statsBars.deathstep = addProgress("Death Step", 0, 400, Color3.fromRGB(150, 0, 200))
     self.statsBars.sharkman = addProgress("Sharkman Karate", 0, 400, Color3.fromRGB(0, 150, 255))
     self.statsBars.electricclaw = addProgress("Electric Claw", 0, 400, Color3.fromRGB(255, 255, 0))
     self.statsBars.dragontalon = addProgress("Dragon Talon", 0, 400, Color3.fromRGB(255, 50, 0))
-fim
+end
 
-função GUI:criarPainelDeControles(pai)
-    painel local = Instance.new("Frame")
+function GUI:createControlsPanel(parent)
+    local panel = Instance.new("Frame")
     panel.Size = UDim2.new(1, 0, 1, 0)
-    painel.TransparênciaDeFundo = 1
-    painel.Visível = falso
-    painel.Pai = pai
-    tabela.inserir(self.painéis, painel)
+    panel.BackgroundTransparency = 1
+    panel.Visible = false
+    panel.Parent = parent
+    table.insert(self.panels, panel)
 
     local y = 10
-    função local addButton(texto, cor, retorno de chamada)
+    local function addButton(text, color, callback)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0.8, 0, 0, 35)
         btn.Position = UDim2.new(0.1, 0, 0, y)
-        btn.BackgroundColor3 = cor ou Color3.fromRGB(255, 200, 0)
+        btn.BackgroundColor3 = color or Color3.fromRGB(255, 200, 0)
         btn.BorderSizePixel = 0
-        btn.Text = texto
+        btn.Text = text
         btn.TextColor3 = Color3.fromRGB(0, 0, 0)
         btn.TextSize = 13
         btn.Font = Enum.Font.GothamBold
-        btn.Parent = painel
-        btn.MouseButton1Click:Conectar(callback)
+        btn.Parent = panel
+        btn.MouseButton1Click:Connect(callback)
         y = y + 42
-        botão de retorno
-    fim
+        return btn
+    end
 
-    self.pauseBtn = addButton("PAUSAR IA", Color3.fromRGB(255, 200, 0), function()
-        self.paused = não self.paused
-        self.pauseBtn.Text = self.paused e "RETOMAR IA" ou "PAUSAR IA"
-        self.statusLabel.Text = self.paused e "PAUSADO" ou "ATIVO"
-        self.statusLabel.TextColor3 = self.paused e Color3.fromRGB(255, 200, 0) ou Color3.fromRGB(0, 255, 100)
-        self:addLog(self.paused and "IA PAUSADA" or "IA RETOMADA")
-        Logger.log(self.paused e "IA pausada" ou "IA retomada")
-        Webhook.send(self.paused and "IA pausada" or "IA retomada")
-    fim)
+    self.pauseBtn = addButton("PAUSE AI", Color3.fromRGB(255, 200, 0), function()
+        self.paused = not self.paused
+        self.pauseBtn.Text = self.paused and "RESUME AI" or "PAUSE AI"
+        self.statusLabel.Text = self.paused and "PAUSED" or "ACTIVE"
+        self.statusLabel.TextColor3 = self.paused and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(0, 255, 100)
+        self:addLog(self.paused and "AI PAUSED" or "AI RESUMED")
+        Logger.log(self.paused and "AI paused" or "AI resumed")
+        Webhook.send(self.paused and "AI paused" or "AI resumed")
+    end)
 
-    addButton("RESETAR PROGRESSO", Color3.fromRGB(255, 80, 80), function()
-        self:addLog("Redefinindo progresso...")
+    addButton("RESET PROGRESS", Color3.fromRGB(255, 80, 80), function()
+        self:addLog("Resetting progress...")
         self.agent:resetProgress()
-        self:addLog("Progresso redefinido.")
-        Logger.log("Progresso redefinido.")
-        Webhook.send("Progresso redefinido.")
-    fim)
+        self:addLog("Progress reset.")
+        Logger.log("Progress reset.")
+        Webhook.send("Progress reset.")
+    end)
 
-    addButton("SALVAR AGORA", Color3.fromRGB(0, 200, 100), function()
+    addButton("SAVE NOW", Color3.fromRGB(0, 200, 100), function()
         self.agent:saveState()
-        self:addLog("Estado salvo.")
-        Logger.log("Estado salvo manualmente.")
-    fim)
+        self:addLog("State saved.")
+        Logger.log("State saved manually.")
+    end)
 
-    self.redeemBtn = addButton("RESGATE AUTOMÁTICO: ATIVO", Color3.fromRGB(0, 200, 100), function()
-        CodeConfig.Enabled = não CodeConfig.Enabled
-        self.redeemBtn.Text = CodeConfig.Enabled e "AUTO RESGATAR: ATIVO" ou "AUTO RESGATAR: INATIVO"
-        self.redeemBtn.BackgroundColor3 = CodeConfig.Enabled e Color3.fromRGB(0, 200, 100) ou Color3.fromRGB(200, 80, 80)
-        self:addLog("Auto Redeem " .. (CodeConfig.Enabled e "ativado" ou "desativado"))
-        Logger.log("Resgate Automático " .. (CodeConfig.Enabled e "ativado" ou "desativado"))
-    fim)
-fim
+    self.redeemBtn = addButton("AUTO REDEEM: ON", Color3.fromRGB(0, 200, 100), function()
+        CodeConfig.Enabled = not CodeConfig.Enabled
+        self.redeemBtn.Text = CodeConfig.Enabled and "AUTO REDEEM: ON" or "AUTO REDEEM: OFF"
+        self.redeemBtn.BackgroundColor3 = CodeConfig.Enabled and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(200, 80, 80)
+        self:addLog("Auto Redeem " .. (CodeConfig.Enabled and "enabled" or "disabled"))
+        Logger.log("Auto Redeem " .. (CodeConfig.Enabled and "enabled" or "disabled"))
+    end)
+end
 
-função GUI:adicionarLog(msg)
-    hora local = os.date("%H:%M:%S")
+function GUI:addLog(msg)
+    local time = os.date("%H:%M:%S")
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1, 0, 0, 18)
     lbl.BackgroundTransparency = 1
-    lbl.Text = "[" .. tempo .. "] " .. msg
+    lbl.Text = "[" .. time .. "] " .. msg
     lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
     lbl.TextSize = 11
     lbl.Font = Enum.Font.GothamMedium
@@ -1301,86 +1270,86 @@ função GUI:adicionarLog(msg)
     self.logContainer.Size = UDim2.new(1, 0, 0, #self.logContainer:GetChildren() * 18)
     self.logScroll.CanvasSize = UDim2.new(0, 0, 0, #self.logContainer:GetChildren() * 18)
     self.logScroll.ScrollBarPosition = Enum.ScrollBarPosition.Bottom
-    aguarde(0.1)
+    wait(0.1)
     self.logScroll.CanvasPosition = Vector2.new(0, self.logScroll.CanvasSize.Y.Offset)
-fim
+end
 
-função GUI:atualizar(estado, agente)
-    se não for self.created, retorne end
-    pcall(função()
-        se self.stateLabels então
-            self.stateLabels.decision.Text = "Decisão: " .. (state.currentDecision ou "Aguardando...")
-            self.stateLabels.level.Text = "Nível: " .. (state.level ou 1) .. " / 2800"
-            self.stateLabels.fragments.Text = "Fragmentos: " .. (state.fragments or 0) .. " / 16500"
-            local beli = agente:getBeli()
-            self.stateLabels.beli.Text = "Beli: "..beli
-            self.stateLabels.style.Text = "Estilo: " .. (state.currentStyle or "Nenhum")
-            domínio local = agente:obterDomínioDeEstilo(estado.estiloAtual ou "")
-            self.stateLabels.mastery.Text = "Domínio: " .. domínio
-            self.stateLabels.godhuman.Text = state.godhuman e "GodHuman: DESBLOQUEADO" ou "GodHuman: BLOQUEADO"
-            self.stateLabels.godhuman.TextColor3 = state.godhuman e Color3.fromRGB(0, 255, 100) ou Color3.fromRGB(255, 80, 80)
-            self.stateLabels.uptime.Text = "Tempo: " .. (state.uptime or 0) .. "s"
-            self.stateLabels.boost.Text = "2x XP: " .. (agent.xpBoostActive e "ATIVO" ou "INATIVO")
-            self.stateLabels.boost.TextColor3 = agent.xpBoostActive e Color3.fromRGB(0, 255, 100) ou Color3.fromRGB(200, 200, 200)
-        fim
+function GUI:update(state, agent)
+    if not self.created then return end
+    pcall(function()
+        if self.stateLabels then
+            self.stateLabels.decision.Text = "Decision: " .. (state.currentDecision or "Waiting...")
+            self.stateLabels.level.Text = "Level: " .. (state.level or 1) .. " / 2800"
+            self.stateLabels.fragments.Text = "Fragments: " .. (state.fragments or 0) .. " / 16500"
+            local beli = agent:getBeli()
+            self.stateLabels.beli.Text = "Beli: " .. beli
+            self.stateLabels.style.Text = "Style: " .. (state.currentStyle or "None")
+            local mastery = agent:getStyleMastery(state.currentStyle or "")
+            self.stateLabels.mastery.Text = "Mastery: " .. mastery
+            self.stateLabels.godhuman.Text = state.godhuman and "GodHuman: UNLOCKED" or "GodHuman: LOCKED"
+            self.stateLabels.godhuman.TextColor3 = state.godhuman and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 80, 80)
+            self.stateLabels.uptime.Text = "Uptime: " .. (state.uptime or 0) .. "s"
+            self.stateLabels.boost.Text = "2x XP: " .. (agent.xpBoostActive and "ACTIVE" or "INACTIVE")
+            self.stateLabels.boost.TextColor3 = agent.xpBoostActive and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(200, 200, 200)
+        end
 
-        se self.statsBars então
-            função local atualizarBarra(barra, valor, máximo)
-                se bar e max e max > 0 então
+        if self.statsBars then
+            local function updateBar(bar, val, max)
+                if bar and max and max > 0 then
                     local pct = math.min(val / max, 1)
                     bar.bar.Size = UDim2.new(pct, 0, 1, 0)
                     bar.val.Text = math.floor(pct * 100) .. "%"
-                fim
-            fim
-            atualizarBarra(self.statsBars.level, state.level, 2800)
-            atualizarBarra(self.statsBars.fragments, state.fragments, 16500)
-            para _, estilo em ipairs(agent.fightingStyles) faça
+                end
+            end
+            updateBar(self.statsBars.level, state.level, 2800)
+            updateBar(self.statsBars.fragments, state.fragments, 16500)
+            for _, style in ipairs(agent.fightingStyles) do
                 local barName = style.name:gsub(" ", ""):lower()
-                Se barName == "waterkungfu" então barName = "water" fim
-                Se barName == "deathstep" então barName = "deathstep" fim
-                Se barName == "electricclaw" então barName = "electricclaw" fim
-                Se barName == "garra de dragão" então barName = "garra de dragão" fim
-                Se barName == "dragonbreath" então barName = "dragon" fim
+                if barName == "waterkungfu" then barName = "water" end
+                if barName == "deathstep" then barName = "deathstep" end
+                if barName == "electricclaw" then barName = "electricclaw" end
+                if barName == "dragontalon" then barName = "dragontalon" end
+                if barName == "dragonbreath" then barName = "dragon" end
                 local bar = self.statsBars[barName]
-                se bar então
-                    domínio local = agente:obterDomínioDeEstilo(estilo.nome)
-                    local required = style.v1 e 500 ou 400
-                    se style.name == "Combat" então required = 1 fim
-                    atualizarBarra(barra, domínio, necessário)
-                fim
-            fim
-        fim
-    fim)
-fim
+                if bar then
+                    local mastery = agent:getStyleMastery(style.name)
+                    local required = style.v1 and 500 or 400
+                    if style.name == "Combat" then required = 1 end
+                    updateBar(bar, mastery, required)
+                end
+            end
+        end
+    end)
+end
 
 -- ============================================
--- AGENTE PRINCIPAL
+-- MAIN AGENT
 -- ============================================
-Agente local = {}
-Agente.__index = Agente
+local Agent = {}
+Agent.__index = Agent
 
-função Agente.novo()
-    local self = setmetatable({}, Agente)
+function Agent.new()
+    local self = setmetatable({}, Agent)
 
     self.keySystem = KeySystem.new()
-    print("Verificando chave...")
-    se não self.keySystem:verify() então
-        print("Chave invalida ou expirada.")
-        retornar nulo
-    fim
-    print("Chave verificada com sucesso.")
+    print("Verifying key...")
+    if not self.keySystem:verify() then
+        print("Invalid or expired key.")
+        return nil
+    end
+    print("Key verified successfully.")
 
     self.antiCheat = AntiCheat.new()
     self.fileName = "scriptgogo_data.json"
     self.state = self:loadState()
     self.cache = Cache.new()
 
-    pcall(função()
+    pcall(function()
         self.player = game.Players.LocalPlayer
-        self.character = self.player.Character ou self.player.CharacterAdded:Wait()
+        self.character = self.player.Character or self.player.CharacterAdded:Wait()
         self.humanoid = self.character:WaitForChild("Humanoid")
         self.rootPart = self.character:WaitForChild("HumanoidRootPart")
-    fim)
+    end)
 
     self.httpService = game:GetService("HttpService")
     self.tweenService = game:GetService("TweenService")
@@ -1388,690 +1357,690 @@ função Agente.novo()
 
     self.maxLevel = 2800
     self.fragmentsNeeded = 16500
-    autodomínioV1 = 500
-    autodomínioV2 = 400
+    self.masteryV1 = 500
+    self.masteryV2 = 400
     self.targetBeli = 50000
-    self.xpBoostActive = falso
+    self.xpBoostActive = false
     self.lastCodeCheck = 0
     self.lastSaveTime = 0
 
-    self.estilosdeluta = {
+    self.fightingStyles = {
         {name = "Combat", v1 = true, sea = "First Sea", masteryRequired = 1, unlocked = false, mastery = 0, obtained = false},
-        {name = "Kung Fu da Água", v1 = true, sea = "Primeiro Mar", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false},
-        {nome = "Elétrico", v1 = true, mar = "Primeiro Mar", maestriaRequerida = 500, desbloqueado = false, maestria = 0, obtido = false},
-        {nome = "Sopro do Dragão", v1 = true, mar = "Segundo Mar", maestriaNecessária = 500, desbloqueado = false, maestria = 0, obtido = false},
+        {name = "Water Kung Fu", v1 = true, sea = "First Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false},
+        {name = "Electric", v1 = true, sea = "First Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false},
+        {name = "Dragon Breath", v1 = true, sea = "Second Sea", masteryRequired = 500, unlocked = false, mastery = 0, obtained = false},
         {name = "Superhuman", v1 = false, sea = "Second Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Combat", "Water Kung Fu", "Electric"}},
-        {name = "Passo da Morte", v1 = false, sea = "Segundo Mar", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Combat", "Water Kung Fu", "Electric"}},
+        {name = "Death Step", v1 = false, sea = "Second Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Combat", "Water Kung Fu", "Electric"}},
         {name = "Sharkman Karate", v1 = false, sea = "Third Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Water Kung Fu", "Dragon Breath"}},
-        {name = "Garra Elétrica", v1 = false, sea = "Terceiro Mar", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Elétrica", "Sopro do Dragão"}},
-        {name = "Garra de Dragão", v1 = false, sea = "Terceiro Mar", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Sopro de Dragão", "Super-humano"}}
+        {name = "Electric Claw", v1 = false, sea = "Third Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Electric", "Dragon Breath"}},
+        {name = "Dragon Talon", v1 = false, sea = "Third Sea", masteryRequired = 400, unlocked = false, mastery = 0, obtained = false, requires = {"Dragon Breath", "Superhuman"}}
     }
 
     self.godhumanRequirements = {
-        estilos = {"Superhumano", "Passo da Morte", "Caratê do Homem-Tubarão", "Garra Elétrica", "Garra de Dragão"},
-        fragmentosNecessários = 16500,
-        nívelRequerido = 2000
+        styles = {"Superhuman", "Death Step", "Sharkman Karate", "Electric Claw", "Dragon Talon"},
+        fragmentsNeeded = 16500,
+        levelRequired = 2000
     }
 
-    self.haki = {desbloqueado = falso, domínio = 0, ativo = falso}
-    self.state.currentDecision = "Inicializando..."
+    self.haki = {unlocked = false, mastery = 0, active = false}
+    self.state.currentDecision = "Initializing..."
     self.runningActions = {}
 
     self.gui = GUI.new(self)
-    self.gui:criar()
-    self.gui:addLog("Script carregado. Aguardando inicio...")
-    Logger.log("Script iniciado para usuário " .. self.keySystem.userId)
-    Webhook.send("Script iniciado. Versão 21.0")
+    self.gui:create()
+    self.gui:addLog("Script loaded. Waiting for start...")
+    Logger.log("Script started for user " .. self.keySystem.userId)
+    Webhook.send("Script started. Version 21.0")
 
-    retornar a si mesmo
-fim
+    return self
+end
 
-função Agente:carregarEstado()
-    sucesso local, dados = pcall(função()
-        se isfile(self.fileName) então
-            conteúdo local = lerararquivo(self.nomeDoArquivo)
-            retornar jogo:GetService("HttpService"):JSONDecode(conteúdo)
-        fim
-        retornar nulo
-    fim)
-    Se houver sucesso e os dados estiverem presentes, retorne os dados. Fim.
-    retornar {
-        nível = 1, xp = 0, fragmentos = 0, deushumano = falso,
+function Agent:loadState()
+    local success, data = pcall(function()
+        if isfile(self.fileName) then
+            local content = readfile(self.fileName)
+            return game:GetService("HttpService"):JSONDecode(content)
+        end
+        return nil
+    end)
+    if success and data then return data end
+    return {
+        level = 1, xp = 0, fragments = 0, godhuman = false,
         raidsCompleted = 0, currentSea = "First Sea",
-        currentStyle = nulo, uptime = 0, lastRaidTime = 0,
-        missõesConcluídas = 0,
-        haki = {desbloqueado = falso, maestria = 0, nível = 0},
-        estilosObtidos = {},
-        códigosrecompensados ​​= {},
-        configurações = {
+        currentStyle = nil, uptime = 0, lastRaidTime = 0,
+        questsCompleted = 0,
+        haki = {unlocked = false, mastery = 0, level = 0},
+        stylesObtained = {},
+        redeemedCodes = {},
+        settings = {
             autoFarm = true, autoQuest = true, autoRaid = true,
-            autoMastery = verdadeiro, autoSpinFruit = verdadeiro,
-            autoTeleportFruit = verdadeiro, autoSwitchSea = verdadeiro,
+            autoMastery = true, autoSpinFruit = true,
+            autoTeleportFruit = true, autoSwitchSea = true,
             autoHaki = true, autoMasteryAllStyles = true
         }
     }
-fim
+end
 
-função Agente:saveState()
-    pcall(função()
+function Agent:saveState()
+    pcall(function()
         local json = self.httpService:JSONEncode(self.state)
-        escreverarquivo(self.nomeDoArquivo, json)
-        Logger.log("Estado salvo automaticamente.")
-    fim)
-fim
+        writefile(self.fileName, json)
+        Logger.log("State saved automatically.")
+    end)
+end
 
-função Agente:redefinirProgresso()
-    self.estado = {
-        nível = 1, xp = 0, fragmentos = 0, deushumano = falso,
+function Agent:resetProgress()
+    self.state = {
+        level = 1, xp = 0, fragments = 0, godhuman = false,
         raidsCompleted = 0, currentSea = "First Sea",
-        currentStyle = nulo, uptime = 0, lastRaidTime = 0,
-        missõesConcluídas = 0,
-        haki = {desbloqueado = falso, maestria = 0, nível = 0},
-        estilosObtidos = {},
-        códigosrecompensados ​​= {},
-        configurações = {
+        currentStyle = nil, uptime = 0, lastRaidTime = 0,
+        questsCompleted = 0,
+        haki = {unlocked = false, mastery = 0, level = 0},
+        stylesObtained = {},
+        redeemedCodes = {},
+        settings = {
             autoFarm = true, autoQuest = true, autoRaid = true,
-            autoMastery = verdadeiro, autoSpinFruit = verdadeiro,
-            autoTeleportFruit = verdadeiro, autoSwitchSea = verdadeiro,
+            autoMastery = true, autoSpinFruit = true,
+            autoTeleportFruit = true, autoSwitchSea = true,
             autoHaki = true, autoMasteryAllStyles = true
         }
     }
-    para _, estilo em ipairs(self.fightingStyles) faça
-        estilo.obtido = falso
-        estilo.desbloqueado = falso
-        estilo.domínio = 0
-    fim
+    for _, style in ipairs(self.fightingStyles) do
+        style.obtained = false
+        style.unlocked = false
+        style.mastery = 0
+    end
     self:saveState()
-    Logger.log("Progresso redefinido.")
-fim
+    Logger.log("Progress reset.")
+end
 
-função Agente:obterBeli()
+function Agent:getBeli()
     local beli = 0
-    pcall(função()
-        dados locais = self.player:FindFirstChild("Dados")
-        se houver dados então
+    pcall(function()
+        local data = self.player:FindFirstChild("Data")
+        if data then
             local b = data:FindFirstChild("Beli")
-            se b então beli = b.Valor fim
-        fim
-    fim)
-    retornar beli
-fim
+            if b then beli = b.Value end
+        end
+    end)
+    return beli
+end
 
-função Agente:obterDomínioDeEstilo(nomeDoEstilo)
-    domínio local = 0
-    pcall(função()
-        dados locais = self.player:FindFirstChild("Dados")
-        se houver dados então
+function Agent:getStyleMastery(styleName)
+    local mastery = 0
+    pcall(function()
+        local data = self.player:FindFirstChild("Data")
+        if data then
             local m = data:FindFirstChild(styleName .. "Mastery")
-            se m então domínio = m.Valor fim
-        fim
-    fim)
-    retornar domínio
-fim
+            if m then mastery = m.Value end
+        end
+    end)
+    return mastery
+end
 
-função Agente:obterDadosDeEstilo(nomeDoEstilo)
-    para _, estilo em ipairs(self.fightingStyles) faça
-        Se style.name == styleName, então retorne style.
-    fim
-    retornar nulo
-fim
+function Agent:getStyleData(styleName)
+    for _, style in ipairs(self.fightingStyles) do
+        if style.name == styleName then return style end
+    end
+    return nil
+end
 
-função Agente:hasRequisitosDeEstilo(estilo)
-    Se não `style.requires`, retorne verdadeiro.
-    para _, reqName em ipairs(style.requires) faça
+function Agent:hasStyleRequirements(style)
+    if not style.requires then return true end
+    for _, reqName in ipairs(style.requires) do
         local reqStyle = self:getStyleData(reqName)
-        Se não reqStyle ou não reqStyle.obtido, retorne falso.
-        domínio local = self:getStyleMaster(reqName)
-        Se o nível de domínio for menor que 500, retorne falso.
-    fim
-    retornar verdadeiro
-fim
+        if not reqStyle or not reqStyle.obtained then return false end
+        local mastery = self:getStyleMastery(reqName)
+        if mastery < 500 then return false end
+    end
+    return true
+end
 
-função Agente:obterEstilo(nomeDoEstilo)
-    pcall(função()
-        estilo local = self:getStyleData(styleName)
-        Se não for um estilo ou um estilo obtido, retorne o fim.
-        Se style.sea ~= self.state.currentSea então retorne fim
-        se não style.v1 e não self:hasStyleRequirements(style) então retorne fim
+function Agent:obtainStyle(styleName)
+    pcall(function()
+        local style = self:getStyleData(styleName)
+        if not style or style.obtained then return end
+        if style.sea ~= self.state.currentSea then return end
+        if not style.v1 and not self:hasStyleRequirements(style) then return end
         self.antiCheat:humanizeAction(function()
             self.replicatedStorage.Remotes.CommF_:InvokeServer("Buy", styleName)
-        fim)
-        estilo.obtido = verdadeiro
+        end)
+        style.obtained = true
         self.state.stylesObtained[styleName] = true
         self:saveState()
-        self.gui:addLog("Estilo obtido: " .. styleName)
-        Logger.log("Estilo obtido: " .. styleName)
-        Webhook.send("Estilo obtido: " .. styleName)
-    fim)
-fim
+        self.gui:addLog("Style obtained: " .. styleName)
+        Logger.log("Style obtained: " .. styleName)
+        Webhook.send("Style obtained: " .. styleName)
+    end)
+end
 
-função Agente:equiparEstilo(nomeDoEstilo)
-    pcall(função()
+function Agent:equipStyle(styleName)
+    pcall(function()
         self.antiCheat:humanizeAction(function()
             self.replicatedStorage.Remotes.CommF_:InvokeServer("Equip", styleName)
-        fim)
+        end)
         self.state.currentStyle = styleName
         self:saveState()
-        self.gui:addLog("Estilo equipado: " .. styleName)
-        Logger.log("Estilo equipado: " ..styleName)
-    fim)
-fim
+        self.gui:addLog("Style equipped: " .. styleName)
+        Logger.log("Style equipped: " .. styleName)
+    end)
+end
 
-função Agente:obterPróximoEstiloParaMestre()
-    se self.state.currentStyle == "Combat" então
+function Agent:getNextStyleToMaster()
+    if self.state.currentStyle == "Combat" then
         local beli = self:getBeli()
-        se beli <self.targetBeli então
-            retornar "Combate"
-        outro
-            para _, estilo em ipairs(self.fightingStyles) faça
-                se style.name ~= "Combat" e não style.obtained e self:canObtainStyle(style) então
-                    retornar estilo.nome
-                fim
-            fim
-            retornar nulo
-        fim
-    fim
-    para _, requiredStyle em ipairs(self.godhumanRequirements.styles) faça
+        if beli < self.targetBeli then
+            return "Combat"
+        else
+            for _, style in ipairs(self.fightingStyles) do
+                if style.name ~= "Combat" and not style.obtained and self:canObtainStyle(style) then
+                    return style.name
+                end
+            end
+            return nil
+        end
+    end
+    for _, requiredStyle in ipairs(self.godhumanRequirements.styles) do
         local styleData = self:getStyleData(requiredStyle)
-        se styleData então
-            domínio local = self:getStyleMaster(estilo necessário)
-            local required = styleData.v1 e self.masteryV1 ou self.masteryV2
-            se não styleData.obtido então
-                Se self:canObtainStyle(styleData) então retorne requiredStyle fim
-            senão se o domínio for menor que o exigido então
-                retornar requiredStyle
-            fim
-        fim
-    fim
-    para _, estilo em ipairs(self.fightingStyles) faça
-        se style.v1 e style.name ~= "Combat" então
-            domínio local = self:getStyleMaster(style.name)
-            Se não houver um estilo obtido e o próprio estilo puder ser obtido, retorne o nome do estilo.
-            Se style.obtido e mastery < self.masteryV1 então retorne style.name fim
-        fim
-    fim
-    para _, estilo em ipairs(self.fightingStyles) faça
-        se não for style.v1 então
-            domínio local = self:getStyleMaster(style.name)
-            Se não houver um estilo obtido e o próprio estilo puder ser obtido, retorne o nome do estilo.
-            Se style.obtido e mastery < self.masteryV2 então retorne style.name fim
-        fim
-    fim
-    retornar nulo
-fim
+        if styleData then
+            local mastery = self:getStyleMastery(requiredStyle)
+            local required = styleData.v1 and self.masteryV1 or self.masteryV2
+            if not styleData.obtained then
+                if self:canObtainStyle(styleData) then return requiredStyle end
+            elseif mastery < required then
+                return requiredStyle
+            end
+        end
+    end
+    for _, style in ipairs(self.fightingStyles) do
+        if style.v1 and style.name ~= "Combat" then
+            local mastery = self:getStyleMastery(style.name)
+            if not style.obtained and self:canObtainStyle(style) then return style.name end
+            if style.obtained and mastery < self.masteryV1 then return style.name end
+        end
+    end
+    for _, style in ipairs(self.fightingStyles) do
+        if not style.v1 then
+            local mastery = self:getStyleMastery(style.name)
+            if not style.obtained and self:canObtainStyle(style) then return style.name end
+            if style.obtained and mastery < self.masteryV2 then return style.name end
+        end
+    end
+    return nil
+end
 
-função Agente:podeObterEstilo(estilo)
-    Se style.sea ~= self.state.currentSea então retorne falso.
-    Se não style.v1 e não self:hasStyleRequirements(style), retorne falso.
-    retornar verdadeiro
-fim
+function Agent:canObtainStyle(style)
+    if style.sea ~= self.state.currentSea then return false end
+    if not style.v1 and not self:hasStyleRequirements(style) then return false end
+    return true
+end
 
-função Agente:autoMasteryAllStyles()
-    se não self.state.settings.autoMasteryAllStyles então retorne fim
-    se self.state.godhuman então retorne fim
+function Agent:autoMasteryAllStyles()
+    if not self.state.settings.autoMasteryAllStyles then return end
+    if self.state.godhuman then return end
 
     local nextStyle = self:getNextStyleToMaster()
-    se não nextStyle então
-        self.gui:addLog("Nenhum estilo disponível para masterizar.")
-        retornar
-    fim
+    if not nextStyle then
+        self.gui:addLog("No styles available to master.")
+        return
+    end
 
     local styleData = self:getStyleData(nextStyle)
-    Se não houver styleData, retorne end
+    if not styleData then return end
 
-    se não styleData.obtido então
-        self:obterEstilo(próximoEstilo)
-        aguarde(1)
-        Se não houver styleData.obtido, retorne o fim.
-    fim
+    if not styleData.obtained then
+        self:obtainStyle(nextStyle)
+        wait(1)
+        if not styleData.obtained then return end
+    end
 
-    se self.state.currentStyle ~= nextStyle então
-        self:equiparEstilo(próximoEstilo)
-        aguarde(0,5)
-    fim
+    if self.state.currentStyle ~= nextStyle then
+        self:equipStyle(nextStyle)
+        wait(0.5)
+    end
 
     local currentMastery = self:getStyleMastery(nextStyle)
     local requiredMastery = styleData.masteryRequired
-    se domínioAtual < domínioRequerido então
-        self:ataquerápido()
-    outro
+    if currentMastery < requiredMastery then
+        self:fastAttack()
+    else
         styleData.unlocked = true
         self:saveState()
-        self.gui:addLog(nextStyle .. " masterizado. (" .. currentMastery .. "/" .. requiredMastery .. ")")
-        Logger.log(nextStyle .. " masterizado. (" .. currentMastery .. "/" .. requiredMastery .. ")")
-    fim
-fim
+        self.gui:addLog(nextStyle .. " mastered. (" .. currentMastery .. "/" .. requiredMastery .. ")")
+        Logger.log(nextStyle .. " mastered. (" .. currentMastery .. "/" .. requiredMastery .. ")")
+    end
+end
 
-função Agente:desbloquearDeusHumano()
-    pcall(função()
-        se self.state.godhuman então retorne fim
+function Agent:unlockGodHuman()
+    pcall(function()
+        if self.state.godhuman then return end
         local allStylesMastered = true
-        para _, styleName em ipairs(self.godhumanRequirements.styles) faça
-            estilo local = self:getStyleData(styleName)
-            se não houver estilo ou se não houver estilo obtido, então todosOsEstilosDominados = falso. Interrompa o processo.
-            domínio local = self:getStyleMaster(styleName)
-            se maestria < 400 então todosOsEstilosDominados = falso interromper fim
-        fim
-        se não todos os estilos estiverem dominados, então
-            self.gui:addLog("Ainda faltam estilos para GodHuman.")
-            retornar
-        fim
-        se self.state.fragments < self.fragmentsNeeded então
-            self.gui:addLog("Fragmentos insuficientes: " .. self.state.fragments .. "/" .. self.fragmentsNeeded)
+        for _, styleName in ipairs(self.godhumanRequirements.styles) do
+            local style = self:getStyleData(styleName)
+            if not style or not style.obtained then allStylesMastered = false break end
+            local mastery = self:getStyleMastery(styleName)
+            if mastery < 400 then allStylesMastered = false break end
+        end
+        if not allStylesMastered then
+            self.gui:addLog("Still missing styles for GodHuman.")
+            return
+        end
+        if self.state.fragments < self.fragmentsNeeded then
+            self.gui:addLog("Insufficient fragments: " .. self.state.fragments .. "/" .. self.fragmentsNeeded)
             self:autoRaid()
-            retornar
-        fim
-        se self.state.level < 2000 então
-            self.gui:addLog("Nível insuficiente: " .. self.state.level .. "/2000")
-            retornar
-        fim
+            return
+        end
+        if self.state.level < 2000 then
+            self.gui:addLog("Insufficient level: " .. self.state.level .. "/2000")
+            return
+        end
         self.antiCheat:humanizeAction(function()
             self.replicatedStorage.Remotes.CommF_:InvokeServer("Buy", "GodHuman")
-        fim)
-        self.state.godhuman = verdadeiro
+        end)
+        self.state.godhuman = true
         self:saveState()
-        self.gui:addLog("GODHUMAN DESBLOQUEADO COM SUCESSO.")
-        Logger.log("GODHUMAN DESBLOQUEADO")
-        Webhook.send("GODHUMAN DESBLOQUEADO!")
-    fim)
-fim
+        self.gui:addLog("GODHUMAN UNLOCKED SUCCESSFULLY.")
+        Logger.log("GODHUMAN UNLOCKED")
+        Webhook.send("GODHUMAN UNLOCKED!")
+    end)
+end
 
-função Agente:obterInimigosPróximos(raio)
-    inimigos locais = {}
-    charPos local = self.rootPart.Position
-    pcall(função()
-        para _, v em pares(game.Workspace:GetChildren()) faça
-            se v:IsA("Model") e v:FindFirstChild("Humanoid") e v:FindFirstChild("HumanoidRootPart") então
-                se v.Name ~= self.character.Name e v.Humanoid.Health > 0 então
+function Agent:getNearbyEnemies(radius)
+    local enemies = {}
+    local charPos = self.rootPart.Position
+    pcall(function()
+        for _, v in pairs(game.Workspace:GetChildren()) do
+            if v:IsA("Model") and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+                if v.Name ~= self.character.Name and v.Humanoid.Health > 0 then
                     local dist = (v.HumanoidRootPart.Position - charPos).Magnitude
-                    se dist <= raio então tabela.inserir(inimigos, v) fim
-                fim
-            fim
-        fim
-    fim)
-    retornar inimigos
-fim
+                    if dist <= radius then table.insert(enemies, v) end
+                end
+            end
+        end
+    end)
+    return enemies
+end
 
-função Agente:obterMultiplicadorXP()
-    base local = (self.state.currentSea == "First Sea" and 1) or (self.state.currentSea == "Second Sea" and 1.5) or 2
-    se self.xpBoostActive então base = base * 2 fim
-    retornar base
-fim
+function Agent:getXPMultiplier()
+    local base = (self.state.currentSea == "First Sea" and 1) or (self.state.currentSea == "Second Sea" and 1.5) or 2
+    if self.xpBoostActive then base = base * 2 end
+    return base
+end
 
-função Agente:verificarNívelUp()
-    local necessário = self.state.level * 100 + 50
-    enquanto (self.state.xp ou 0) >= necessário e self.state.level < self.maxLevel faça
-        self.state.xp = self.state.xp - necessário
+function Agent:checkLevelUp()
+    local needed = self.state.level * 100 + 50
+    while (self.state.xp or 0) >= needed and self.state.level < self.maxLevel do
+        self.state.xp = self.state.xp - needed
         self.state.level = self.state.level + 1
-        necessário = self.state.level * 100 + 50
-        self.gui:addLog("Subiu de nível. " .. self.state.level .. "/2800")
-        Logger.log("Subiu de nível. " .. self.state.level .. "/2800")
-        Webhook.send("Suba de nível. " .. self.state.level .. "/2800")
+        needed = self.state.level * 100 + 50
+        self.gui:addLog("Level UP. " .. self.state.level .. "/2800")
+        Logger.log("Level UP. " .. self.state.level .. "/2800")
+        Webhook.send("Level UP. " .. self.state.level .. "/2800")
         self:saveState()
-        se self.state.settings.autoSwitchSea então
-            se self.state.level >= 700 e self.state.currentSea == "First Sea" então
-                self:switchSea("Segundo Mar")
-            senão se self.state.level >= 1500 e self.state.currentSea == "Segundo Mar" então
-                self:switchSea("Terceiro Mar")
-            fim
-        fim
-    fim
-fim
+        if self.state.settings.autoSwitchSea then
+            if self.state.level >= 700 and self.state.currentSea == "First Sea" then
+                self:switchSea("Second Sea")
+            elseif self.state.level >= 1500 and self.state.currentSea == "Second Sea" then
+                self:switchSea("Third Sea")
+            end
+        end
+    end
+end
 
-função Agente:teleportarPara(posição)
+function Agent:teleportTo(position)
     pcall(function() self.rootPart.CFrame = CFrame.new(position) end)
-fim
+end
 
-função Agente:switchMar(mar)
-    pcall(função()
-        Se self.state.currentSea == sea então retorne fim
-        mares locais = {
-            ["Segundo Mar"] = Vector3.new(1200, 150, 8000),
-            ["Terceiro Mar"] = Vector3.new(-6000, 150, 6000)
+function Agent:switchSea(sea)
+    pcall(function()
+        if self.state.currentSea == sea then return end
+        local seas = {
+            ["Second Sea"] = Vector3.new(1200, 150, 8000),
+            ["Third Sea"] = Vector3.new(-6000, 150, 6000)
         }
-        local pos = mares[mar]
-        se positivo então
+        local pos = seas[sea]
+        if pos then
             self:teleportTo(pos)
-            self.state.currentSea = mar
-            self.gui:addLog("Mudou para " .. mar)
-            Logger.log("Mudou para ".. mar)
-            Webhook.send("Mudou para ".. mar)
+            self.state.currentSea = sea
+            self.gui:addLog("Switched to " .. sea)
+            Logger.log("Switched to " .. sea)
+            Webhook.send("Switched to " .. sea)
             self:saveState()
-        fim
-    fim)
-fim
+        end
+    end)
+end
 
-função Agente:moverParaIlhaAleatória()
-    ilhas locais = {
-        ["Primeiro Mar"] = {Vector3.new(-1200, 80, 2800), Vector3.new(300, 50, 4500), Vector3.new(-4500, 100, -2500)},
-        ["Segundo Mar"] = {Vector3.new(1200, 150, 8000), Vector3.new(5000, 500, 0), Vector3.new(-3000, 100, 7000)},
-        ["Terceiro Mar"] = {Vector3.new(0, 400, 0), Vector3.new(3000, 300, 3000), Vector3.new(-6000, 150, 6000)}
+function Agent:moveToRandomIsland()
+    local islands = {
+        ["First Sea"] = {Vector3.new(-1200, 80, 2800), Vector3.new(300, 50, 4500), Vector3.new(-4500, 100, -2500)},
+        ["Second Sea"] = {Vector3.new(1200, 150, 8000), Vector3.new(5000, 500, 0), Vector3.new(-3000, 100, 7000)},
+        ["Third Sea"] = {Vector3.new(0, 400, 0), Vector3.new(3000, 300, 3000), Vector3.new(-6000, 150, 6000)}
     }
-    local seaIslands = ilhas[self.state.currentSea] ou ilhas["First Sea"]
+    local seaIslands = islands[self.state.currentSea] or islands["First Sea"]
     local pos = seaIslands[math.random(1, #seaIslands)]
-    se pos então self:teleportTo(pos) fim
-fim
+    if pos then self:teleportTo(pos) end
+end
 
-função Agente:ataquerá
-    pcall(função()
-        se self.state.settings.autoHaki então self:autoHaki() fim
-        inimigos locais = self:getNearbyEnemies(80)
-        se #inimigos == 0 então self:moverParaIlhaAleatória() retornar fim
-        alvo local = inimigos[1]
+function Agent:fastAttack()
+    pcall(function()
+        if self.state.settings.autoHaki then self:autoHaki() end
+        local enemies = self:getNearbyEnemies(80)
+        if #enemies == 0 then self:moveToRandomIsland() return end
+        local target = enemies[1]
         self:teleportTo(target.HumanoidRootPart.Position + Vector3.new(0, 5, 0))
-        ataques locais = math.random(2, 5)
-        para i = 1, os ataques fazem
+        local attacks = math.random(2, 5)
+        for i = 1, attacks do
             self.antiCheat:humanizeAction(function()
                 self.replicatedStorage.Remotes.CommF_:InvokeServer("Attack", {[1] = target.HumanoidRootPart})
-            fim)
-            aguarde(0,085 + math.random(0, 5) * 0,001)
-        fim
+            end)
+            wait(0.085 + math.random(0, 5) * 0.001)
+        end
         local xpGain = 50 * self:getXPMultiplier()
-        self.state.xp = (self.state.xp ou 0) + xpGanho
-        self:verificarNívelAvançado()
+        self.state.xp = (self.state.xp or 0) + xpGain
+        self:checkLevelUp()
         local currentStyle = self.state.currentStyle
-        se currentStyle então
-            domínio local = self:getStyleMaster(estiloAtual)
-            self.state.masteryProgress = self.state.masteryProgress ou {}
-            self.state.masteryProgress[currentStyle] = maestria
+        if currentStyle then
+            local mastery = self:getStyleMastery(currentStyle)
+            self.state.masteryProgress = self.state.masteryProgress or {}
+            self.state.masteryProgress[currentStyle] = mastery
             self:saveState()
-        fim
-    fim)
-fim
+        end
+    end)
+end
 
-função Agente:autoHaki()
-    se não self.state.settings.autoHaki então retorne fim
-    se não self.state.haki.unlocked então
-        se self.state.level >= 50 então
-            pcall (função()
+function Agent:autoHaki()
+    if not self.state.settings.autoHaki then return end
+    if not self.state.haki.unlocked then
+        if self.state.level >= 50 then
+            pcall(function()
                 self.replicatedStorage.Remotes.CommF_:InvokeServer("Haki", "Unlock")
-                aguarde(1)
-                se self.character:FindFirstChild("Haki") então
+                wait(1)
+                if self.character:FindFirstChild("Haki") then
                     self.state.haki.unlocked = true
                     self:saveState()
-                    self.gui:addLog("Haki desbloqueado.")
-                    Logger.log("Haki desbloqueado.")
-                fim
-            fim)
-        fim
-        retornar
-    fim
-    pcall(função()
+                    self.gui:addLog("Haki unlocked.")
+                    Logger.log("Haki unlocked.")
+                end
+            end)
+        end
+        return
+    end
+    pcall(function()
         local hakiAbility = self.character:FindFirstChild("Haki")
-        se hakiAbility e não hakiAbility.Enabled então
+        if hakiAbility and not hakiAbility.Enabled then
             self.antiCheat:humanizeAction(function()
                 self.replicatedStorage.Remotes.CommF_:InvokeServer("Haki", "Enable")
-            fim)
-            self.gui:addLog("Haki ativado.")
-        fim
-    fim)
-fim
+            end)
+            self.gui:addLog("Haki activated.")
+        end
+    end)
+end
 
-função Agente:autoRaid()
-    se não self.state.settings.autoRaid então retorne fim
-    se self.state.godhuman então retorne fim
-    Se self.state.level < 700 então retorne fim
+function Agent:autoRaid()
+    if not self.state.settings.autoRaid then return end
+    if self.state.godhuman then return end
+    if self.state.level < 700 then return end
     local currentTime = os.time()
-    Se currentTime - (self.state.lastRaidTime ou 0) < 120 então retorne fim
-    pcall(função()
-        self.gui:addLog("Iniciando Raid Ice...")
-        Logger.log("Iniciando Raid Ice.")
+    if currentTime - (self.state.lastRaidTime or 0) < 120 then return end
+    pcall(function()
+        self.gui:addLog("Starting Ice Raid...")
+        Logger.log("Starting Ice Raid.")
         self.replicatedStorage.Remotes.CommF_:InvokeServer("Raid", "Start", "Ice")
-        aguarde(2)
+        wait(2)
         local raidTime = 0
-        enquanto raidTime < 180 faça
-            inimigos locais = self:getNearbyEnemies(150)
-            se #inimigos > 0 então self:ataquerápido() fim
-            TempoDeIncursão = TempoDeIncursão + 1
-            aguarde(1)
-        fim
+        while raidTime < 180 do
+            local enemies = self:getNearbyEnemies(150)
+            if #enemies > 0 then self:fastAttack() end
+            raidTime = raidTime + 1
+            wait(1)
+        end
         self.replicatedStorage.Remotes.CommF_:InvokeServer("Raid", "Complete")
-        fragmentsEarned local = 300 + math.random(0, 150)
-        self.state.fragments = (self.state.fragments ou 0) + fragmentsEarned
-        self.state.raidsCompleted = (self.state.raidsCompleted ou 0) + 1
+        local fragmentsEarned = 300 + math.random(0, 150)
+        self.state.fragments = (self.state.fragments or 0) + fragmentsEarned
+        self.state.raidsCompleted = (self.state.raidsCompleted or 0) + 1
         self.state.lastRaidTime = os.time()
         self:saveState()
-        self.gui:addLog("Raid completada. +" .. fragmentosEarned .. "fragmentos")
-        Logger.log("Raid concluída. +" .. fragmentsEarned .. " fragmentos")
-        Webhook.send("Raid concluída. +" .. fragmentsEarned .. " fragmentos")
-    fim)
-fim
+        self.gui:addLog("Raid completed. +" .. fragmentsEarned .. " fragments")
+        Logger.log("Raid completed. +" .. fragmentsEarned .. " fragments")
+        Webhook.send("Raid completed. +" .. fragmentsEarned .. " fragments")
+    end)
+end
 
-função Agente:autoQuest()
-    se não self.state.settings.autoQuest então retorne fim
-    pcall(função()
+function Agent:autoQuest()
+    if not self.state.settings.autoQuest then return end
+    pcall(function()
         local questData = self.replicatedStorage.Remotes.CommF_:InvokeServer("Quest", "Check")
-        se não questData ou não questData.Active então
-            npcs locais = {}
-            para _, v em pares(game.Workspace:GetChildren()) faça
-                se v:IsA("Model") e v:FindFirstChild("Humanoid") e
-                   (v.Name:find("NPC") ou v.Name:find("Quest")) então
-                    tabela.inserir(npcs, v)
-                fim
-            fim
-            se #npcs > 0 então
+        if not questData or not questData.Active then
+            local npcs = {}
+            for _, v in pairs(game.Workspace:GetChildren()) do
+                if v:IsA("Model") and v:FindFirstChild("Humanoid") and 
+                   (v.Name:find("NPC") or v.Name:find("Quest")) then
+                    table.insert(npcs, v)
+                end
+            end
+            if #npcs > 0 then
                 local npc = npcs[math.random(1, #npcs)]
                 self:teleportTo(npc.HumanoidRootPart.Position + Vector3.new(0, 5, 0))
-                aguarde(1)
+                wait(1)
                 self.replicatedStorage.Remotes.CommF_:InvokeServer("Quest", "Start")
-                self.gui:addLog("Questão aceita.")
-                Logger.log("Missão aceita.")
-            fim
-        outro
-            self:ataquerápido()
-            progresso local = self.replicatedStorage.Remotes.CommF_:InvokeServer("Quest", "Check")
-            se houver progresso e progresso.Complete então
+                self.gui:addLog("Quest accepted.")
+                Logger.log("Quest accepted.")
+            end
+        else
+            self:fastAttack()
+            local progress = self.replicatedStorage.Remotes.CommF_:InvokeServer("Quest", "Check")
+            if progress and progress.Complete then
                 self.replicatedStorage.Remotes.CommF_:InvokeServer("Quest", "Complete")
-                self.state.questsCompleted = (self.state.questsCompleted ou 0) + 1
-                bônus localXP = 200 * self:getXPMultiplier()
-                self.state.xp = (self.state.xp ou 0) + bonusXP
-                self:verificarNívelAvançado()
+                self.state.questsCompleted = (self.state.questsCompleted or 0) + 1
+                local bonusXP = 200 * self:getXPMultiplier()
+                self.state.xp = (self.state.xp or 0) + bonusXP
+                self:checkLevelUp()
                 self:saveState()
-                self.gui:addLog("Quest completada. +" .. bônusXP .. " XP")
-                Logger.log("Missão concluída. +" .. bonusXP .. " XP")
-            fim
-        fim
-    fim)
-fim
+                self.gui:addLog("Quest completed. +" .. bonusXP .. " XP")
+                Logger.log("Quest completed. +" .. bonusXP .. " XP")
+            end
+        end
+    end)
+end
 
-função Agente:autoGirarFrutas()
-    se não self.state.settings.autoSpinFruit então retorne fim
-    pcall(função()
-        giros locais = self.player.Data.Spins.Value
-        se spins > 0 então
+function Agent:autoSpinFruit()
+    if not self.state.settings.autoSpinFruit then return end
+    pcall(function()
+        local spins = self.player.Data.Spins.Value
+        if spins > 0 then
             self.antiCheat:humanizeAction(function()
-                fruta local = self.replicatedStorage.Remotes.CommF_:InvokeServer("Spin", "Spin")
-                se for fruta, então
-                    self.gui:addLog("Fruta obtida: " .. fruta)
-                    Logger.log("Fruta obtida: " .. fruta)
-                fim
-            fim)
-        fim
-    fim)
-fim
+                local fruit = self.replicatedStorage.Remotes.CommF_:InvokeServer("Spin", "Spin")
+                if fruit then
+                    self.gui:addLog("Fruit obtained: " .. fruit)
+                    Logger.log("Fruit obtained: " .. fruit)
+                end
+            end)
+        end
+    end)
+end
 
-agente de função:autoTeleportFruit()
-    se não self.state.settings.autoTeleportFruit então retorne fim
-    pcall(função()
-        Frutas lendárias locais = {"Dragão","Leopardo","Massa","Veneno","Espírito","Kitsune","Yeti","Gravidade","Sombra","Luz"}
-        para _, v em pares(game.Workspace:GetChildren()) faça
-            se v:IsA("Model") e v:FindFirstChild("Fruit") então
-                nomeDaFrutaLocal = v.Nome
-                local isLegendary = falso
-                para _, f em ipairs(legendaryFruits) faça
-                    se fruitName:find(f) então isLegendary = true break end
-                fim
-                se isLegendary então
+function Agent:autoTeleportFruit()
+    if not self.state.settings.autoTeleportFruit then return end
+    pcall(function()
+        local legendaryFruits = {"Dragon","Leopard","Dough","Venom","Spirit","Kitsune","Yeti","Gravity","Shadow","Light"}
+        for _, v in pairs(game.Workspace:GetChildren()) do
+            if v:IsA("Model") and v:FindFirstChild("Fruit") then
+                local fruitName = v.Name
+                local isLegendary = false
+                for _, f in ipairs(legendaryFruits) do
+                    if fruitName:find(f) then isLegendary = true break end
+                end
+                if isLegendary then
                     self.antiCheat:humanizeAction(function()
                         local pos = v.HumanoidRootPart.Position
                         self:teleportTo(pos + Vector3.new(0, 5, 0))
-                        clique local = v:FindFirstChild("ClickDetector")
-                        se clicar então
-                            detectordeclique de fogo(clique)
-                            self.gui:addLog("Fruta lendaria coletada: " .. frutaName)
-                            Logger.log("Fruta lendaria coletada: " .. frutaName)
-                            Webhook.send("Fruta lendaria coletada: " .. frutaName)
-                        fim
-                    fim)
-                fim
-            fim
-        fim
-    fim)
-fim
+                        local click = v:FindFirstChild("ClickDetector")
+                        if click then
+                            fireclickdetector(click)
+                            self.gui:addLog("Legendary fruit collected: " .. fruitName)
+                            Logger.log("Legendary fruit collected: " .. fruitName)
+                            Webhook.send("Legendary fruit collected: " .. fruitName)
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+end
 
-função Agente:autoRedeemCodes()
-    Se não CodeConfig.Enabled, retorne.
-    local agora = os.time()
-    Se agora - self.lastCodeCheck < CodeConfig.CheckInterval então retorne fim
-    self.lastCodeCheck = agora
+function Agent:autoRedeemCodes()
+    if not CodeConfig.Enabled then return end
+    local now = os.time()
+    if now - self.lastCodeCheck < CodeConfig.CheckInterval then return end
+    self.lastCodeCheck = now
 
-    pcall(função()
-        códigos locais = {}
-        se CodeConfig.CodesURL ~= "" então
-            conteúdo local = jogo:HttpGet(CodeConfig.CodesURL)
-            para cada linha em string.gmatch(content, "[^\r\n]+") faça
-                se linha e linha ~= "" então tabela.inserir(códigos, linha) fim
-            fim
-        fim
-        para _, código em ipairs(CodeConfig.FixedCodes) faça
-            tabela.inserir(códigos, código)
-        fim
+    pcall(function()
+        local codes = {}
+        if CodeConfig.CodesURL ~= "" then
+            local content = game:HttpGet(CodeConfig.CodesURL)
+            for line in string.gmatch(content, "[^\r\n]+") do
+                if line and line ~= "" then table.insert(codes, line) end
+            end
+        end
+        for _, code in ipairs(CodeConfig.FixedCodes) do
+            table.insert(codes, code)
+        end
 
-        local único = {}
-        para _, código em ipairs(códigos) faça
-            se não unique[code] então unique[code] = verdadeiro fim
-        fim
-        códigos = {}
-        para cada código em pares (únicos) faça tabela.inserir(códigos, código) fim
+        local unique = {}
+        for _, code in ipairs(codes) do
+            if not unique[code] then unique[code] = true end
+        end
+        codes = {}
+        for code in pairs(unique) do table.insert(codes, code) end
 
-        para _, código em ipairs(códigos) faça
-            se não self.state.redeemedCodes[code] então
+        for _, code in ipairs(codes) do
+            if not self.state.redeemedCodes[code] then
                 self.antiCheat:humanizeAction(function()
-                    local remoto = self.replicatedStorage.Remotes.CommF_
-                    se for remoto então
-                        resultado local = remoto:InvokeServer("Código", código)
-                        se resultado e resultado == "Resgatado" então
+                    local remote = self.replicatedStorage.Remotes.CommF_
+                    if remote then
+                        local result = remote:InvokeServer("Code", code)
+                        if result and result == "Redeemed" then
                             self.state.redeemedCodes[code] = true
                             self.xpBoostActive = true
                             self:saveState()
-                            self.gui:addLog("Código resgatado: " .. code .. " (2x XP ativado)")
-                            Logger.log("Código resgatado: " .. código)
-                            Webhook.send("Código resgatado: " .. código)
-                        senão se resultado e resultado == "Já Resgatado" então
+                            self.gui:addLog("Code redeemed: " .. code .. " (2x XP activated)")
+                            Logger.log("Code redeemed: " .. code)
+                            Webhook.send("Code redeemed: " .. code)
+                        elseif result and result == "Already Redeemed" then
                             self.state.redeemedCodes[code] = true
                             self:saveState()
-                        fim
-                    fim
-                fim)
-                aguarde(1)
-            fim
-        fim
-    fim)
-fim
+                        end
+                    end
+                end)
+                wait(1)
+            end
+        end
+    end)
+end
 
-função Agente:decidirPrioridade()
-    se self.gui.paused então
-        self.state.currentDecision = "PAUSADO"
-        retornar
-    fim
+function Agent:decidePriority()
+    if self.gui.paused then
+        self.state.currentDecision = "PAUSED"
+        return
+    end
 
-    local agora = os.time()
-    se agora - self.lastSaveTime >= Config.SAVE_INTERVAL então
+    local now = os.time()
+    if now - self.lastSaveTime >= Config.SAVE_INTERVAL then
         self:saveState()
-        self.lastSaveTime = agora
-    fim
+        self.lastSaveTime = now
+    end
 
     self:autoRedeemCodes()
 
-    se self.state.godhuman então
-        se self.state.level < self.maxLevel então
-            self.state.currentDecision = "Nível Maximo (" .. self.state.level .. "/" .. self.maxLevel .. ")"
-            self:ataquerápido()
+    if self.state.godhuman then
+        if self.state.level < self.maxLevel then
+            self.state.currentDecision = "Max Level (" .. self.state.level .. "/" .. self.maxLevel .. ")"
+            self:fastAttack()
             self:autoQuest()
-        outro
-            self.state.currentDecision = "Concluído. (Jogo zerado)"
-            self:autoGirarFrutas()
+        else
+            self.state.currentDecision = "Completed. (Game finished)"
+            self:autoSpinFruit()
             self:autoTeleportFruit()
-        fim
-        retornar
-    fim
+        end
+        return
+    end
 
     local allStylesMastered = true
-    para _, estilo em ipairs(self.fightingStyles) faça
-        se style.name ~= "Combat" então
-            domínio local = self:getStyleMaster(style.name)
-            local required = style.v1 e self.masteryV1 ou self.masteryV2
-            Se o estilo obtido e o domínio forem menores que o exigido, então
-                todosOsEstilosDominados = falso
-                quebrar
-            fim
-            se não houver estilo obtido então
-                todosOsEstilosDominados = falso
-                quebrar
-            fim
-        fim
-    fim
+    for _, style in ipairs(self.fightingStyles) do
+        if style.name ~= "Combat" then
+            local mastery = self:getStyleMastery(style.name)
+            local required = style.v1 and self.masteryV1 or self.masteryV2
+            if style.obtained and mastery < required then
+                allStylesMastered = false
+                break
+            end
+            if not style.obtained then
+                allStylesMastered = false
+                break
+            end
+        end
+    end
 
-    se todos os estilos estiverem dominados, então
-        self.state.currentDecision = "Maestria completa, focando GodHuman"
-        se self.state.fragments < self.fragmentsNeeded então
-            self.state.currentDecision = "Fragmentos Faltam (" .. self.state.fragments .. "/" .. self.fragmentsNeeded .. ")"
+    if allStylesMastered then
+        self.state.currentDecision = "Mastery complete, focusing GodHuman"
+        if self.state.fragments < self.fragmentsNeeded then
+            self.state.currentDecision = "Need fragments (" .. self.state.fragments .. "/" .. self.fragmentsNeeded .. ")"
             self:autoRaid()
-            retornar
-        fim
-        se self.state.level < 2000 então
-            self.state.currentDecision = "Níveis Faltam (" .. self.state.level .. "/2000)"
-            self:ataquerápido()
+            return
+        end
+        if self.state.level < 2000 then
+            self.state.currentDecision = "Need levels (" .. self.state.level .. "/2000)"
+            self:fastAttack()
             self:autoQuest()
-            retornar
-        fim
-        self:desbloquearDeusHumano()
-        retornar
-    fim
+            return
+        end
+        self:unlockGodHuman()
+        return
+    end
 
     local nextStyle = self:getNextStyleToMaster()
-    se nextStyle então
-        self.state.currentDecision = "Masterizando " .. nextStyle
+    if nextStyle then
+        self.state.currentDecision = "Mastering " .. nextStyle
         self:autoMasteryAllStyles()
-        retornar
-    fim
+        return
+    end
 
-    se self.state.currentSea == "First Sea" e self.state.level >= 700 então
-        self.state.currentDecision = "Mudando para Second Sea"
-        self:switchSea("Segundo Mar")
-        retornar
-    senão se self.state.currentSea == "Segundo Mar" e self.state.level >= 1500 então
-        self.state.currentDecision = "Mudando para Third Sea"
-        self:switchSea("Terceiro Mar")
-        retornar
-    fim
+    if self.state.currentSea == "First Sea" and self.state.level >= 700 then
+        self.state.currentDecision = "Switching to Second Sea"
+        self:switchSea("Second Sea")
+        return
+    elseif self.state.currentSea == "Second Sea" and self.state.level >= 1500 then
+        self.state.currentDecision = "Switching to Third Sea"
+        self:switchSea("Third Sea")
+        return
+    end
 
-    self.state.currentDecision = "Fazenda genérica"
-    self:ataquerápido()
+    self.state.currentDecision = "Generic farm"
+    self:fastAttack()
     self:autoQuest()
-fim
+end
 
-função Agente:executar()
-    print("SCRIPT GOGO - EM EXECUÇÃO.")
-    self.gui:addLog("IA foi iniciada. Objetivo: Zerar o jogo.")
-    Logger.log("IA iniciada.")
-    Webhook.send("IA iniciada.")
+function Agent:run()
+    print("SCRIPT GOGO - RUNNING.")
+    self.gui:addLog("AI started. Goal: Complete the game.")
+    Logger.log("AI started.")
+    Webhook.send("AI started.")
 
-    enquanto verdadeiro faz
-        pcall(função()
+    while true do
+        pcall(function()
             self:decidePriority()
             self:autoHaki()
-            self.gui:atualizar(self.state, self)
-            self.state.uptime = (self.state.uptime ou 0) + 1
-        fim)
-        tarefa.esperar(0.5)
-    fim
-fim
+            self.gui:update(self.state, self)
+            self.state.uptime = (self.state.uptime or 0) + 1
+        end)
+        task.wait(0.5)
+    end
+end
 
 -- ============================================
 -- INTRO
 -- ============================================
-função local showIntro()
+local function showIntro()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "Intro"
     screenGui.Parent = game:GetService("CoreGui")
@@ -2084,14 +2053,14 @@ função local showIntro()
     background.BorderSizePixel = 0
     background.Parent = screenGui
 
-    brilho local = Instance.new("Frame")
-    brilho.Tamanho = UDim2.novo(1, 0, 1, 0)
-    brilho.CorDeFundo3 = Cor3.fromRGB(255, 200, 0)
-    brilho.Transparência de fundo = 0,95
-    brilho.TamanhoDaBordaPixel = 0
-    brilho.Pai = fundo
+    local glow = Instance.new("Frame")
+    glow.Size = UDim2.new(1, 0, 1, 0)
+    glow.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+    glow.BackgroundTransparency = 0.95
+    glow.BorderSizePixel = 0
+    glow.Parent = background
 
-    script local = Instance.new("TextLabel")
+    local scriptName = Instance.new("TextLabel")
     scriptName.Size = UDim2.new(1, 0, 0, 50)
     scriptName.Position = UDim2.new(0, 0, 0.2, 0)
     scriptName.BackgroundTransparency = 1
@@ -2100,57 +2069,57 @@ função local showIntro()
     scriptName.TextSize = 50
     scriptName.Font = Enum.Font.GothamBold
     scriptName.TextScaled = true
-    scriptName.Parent = fundo
+    scriptName.Parent = background
 
-    legenda local = Instance.new("TextLabel")
+    local subtitle = Instance.new("TextLabel")
     subtitle.Size = UDim2.new(1, 0, 0, 40)
     subtitle.Position = UDim2.new(0, 0, 0.35, 0)
-    legenda.TransparênciaDeFundo = 1
-    legenda.Texto = "GODHUMAN FARMER ULTIMATE"
-    subtítulo.TextColor3 = Color3.fromRGB(255, 255, 255)
+    subtitle.BackgroundTransparency = 1
+    subtitle.Text = "GODHUMAN FARMER ULTIMATE"
+    subtitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     subtitle.TextSize = 30
-    legenda.Fonte = Enum.Fonte.GothamMedium
-    legenda.TextoEscalado = verdadeiro
-    legenda.TextTransparência = 0,5
-    legenda.Pai = fundo
+    subtitle.Font = Enum.Font.GothamMedium
+    subtitle.TextScaled = true
+    subtitle.TextTransparency = 0.5
+    subtitle.Parent = background
 
-    versão local = Instance.new("TextLabel")
+    local version = Instance.new("TextLabel")
     version.Size = UDim2.new(1, 0, 0, 25)
-    versão.Posição = UDim2.new(0, 0, 0.45, 0)
-    versão.TransparênciaDeFundo = 1
-    version.Text = "V21.0 - GERADOR DE CHAVES"
-    versão.TextColor3 = Color3.fromRGB(255, 215, 0)
-    versão.TextSize = 16
-    versão.Fonte = Enum.Fonte.GothamMedium
-    versão.TextoEscalado = verdadeiro
-    versão.TextTransparência = 0,7
-    versão.Pai = fundo
+    version.Position = UDim2.new(0, 0, 0.45, 0)
+    version.BackgroundTransparency = 1
+    version.Text = "V21.0 - KEY GENERATOR"
+    version.TextColor3 = Color3.fromRGB(255, 215, 0)
+    version.TextSize = 16
+    version.Font = Enum.Font.GothamMedium
+    version.TextScaled = true
+    version.TextTransparency = 0.7
+    version.Parent = background
 
-    linha local = Instance.new("Frame")
+    local line = Instance.new("Frame")
     line.Size = UDim2.new(0.5, 0, 0, 2)
-    linha.Posição = UDim2.new(0.25, 0, 0.52, 0)
-    linha.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-    linha.TransparênciaDeFundo = 0,5
-    linha.BorderSizePixel = 0
-    linha.Pai = fundo
+    line.Position = UDim2.new(0.25, 0, 0.52, 0)
+    line.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+    line.BackgroundTransparency = 0.5
+    line.BorderSizePixel = 0
+    line.Parent = background
 
     local loadText = Instance.new("TextLabel")
     loadText.Size = UDim2.new(1, 0, 0, 30)
     loadText.Position = UDim2.new(0, 0, 0.65, 0)
     loadText.BackgroundTransparency = 1
-    loadText.Text = "CARREGANDO IA DECISIVA..."
+    loadText.Text = "LOADING DECISION AI..."
     loadText.TextColor3 = Color3.fromRGB(255, 255, 255)
     loadText.TextSize = 16
     loadText.Font = Enum.Font.GothamMedium
     loadText.TextTransparency = 0.5
-    loadText.Parent = fundo
+    loadText.Parent = background
 
     local loadBarBg = Instance.new("Frame")
     loadBarBg.Size = UDim2.new(0.4, 0, 0, 4)
     loadBarBg.Position = UDim2.new(0.3, 0, 0.72, 0)
     loadBarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     loadBarBg.BorderSizePixel = 0
-    loadBarBg.Parent = fundo
+    loadBarBg.Parent = background
 
     local loadBar = Instance.new("Frame")
     loadBar.Size = UDim2.new(0, 0, 1, 0)
@@ -2158,91 +2127,88 @@ função local showIntro()
     loadBar.BorderSizePixel = 0
     loadBar.Parent = loadBarBg
 
-    créditos locais = Instance.new("TextLabel")
+    local credits = Instance.new("TextLabel")
     credits.Size = UDim2.new(1, 0, 0, 20)
     credits.Position = UDim2.new(0, 0, 0.88, 0)
-    créditos.TransparênciaDeFundo = 1
+    credits.BackgroundTransparency = 1
     credits.Text = "POWERED BY SCRIPT GOGO"
-    créditos.TextColor3 = Color3.fromRGB(100, 100, 100)
-    créditos.TamanhoDoTexto = 12
-    créditos.Fonte = Enum.Fonte.GothamMedium
-    créditos.TextTransparência = 0,5
-    créditos.Pai = fundo
+    credits.TextColor3 = Color3.fromRGB(100, 100, 100)
+    credits.TextSize = 12
+    credits.Font = Enum.Font.GothamMedium
+    credits.TextTransparency = 0.5
+    credits.Parent = background
 
     local startTime = tick()
-    duração local = 3,5
+    local duration = 3.5
 
-    jogo:ObterServiço("ExecutarServiço").RenderEscalonado:Conectar(função()
-        local decorrido = tick() - tempoInicial
-        progresso local = math.min(tempo decorrido / duração, 1)
-        scriptName.TextTransparency = 1 - progresso
-        scriptName.Position = UDim2.new(0, 0, 0.2 - (1 - progresso) * 0.05, 0)
-        legenda.TransparênciaDoTexto = 0,5 - progresso * 0,5
+    game:GetService("RunService").RenderStepped:Connect(function()
+        local elapsed = tick() - startTime
+        local progress = math.min(elapsed / duration, 1)
+        scriptName.TextTransparency = 1 - progress
+        scriptName.Position = UDim2.new(0, 0, 0.2 - (1 - progress) * 0.05, 0)
+        subtitle.TextTransparency = 0.5 - progress * 0.5
         loadBar.Size = UDim2.new(progress, 0, 1, 0)
-        brilho.TransparênciaDeFundo = 0,95 - progresso * 0,3
-        se o progresso for maior ou igual a 1, então
-            aguarde(0,5)
-            screenGui:Destruir()
-        fim
-    fim)
+        glow.BackgroundTransparency = 0.95 - progress * 0.3
+        if progress >= 1 then
+            wait(0.5)
+            screenGui:Destroy()
+        end
+    end)
 
-    aguarde(4)
-fim
+    wait(4)
+end
 
 -- ============================================
--- INICIALIZAÇÃOÃ‡ÃƒO
+-- INITIALIZATION
 -- ============================================
 
--- Se o modo administrador estiver ativo, mostra o gerador de chaves
-se ADMIN_MODE então
-    print("[ADMIN] Modo administrador ativado. Abrindo gerador de chaves...")
-    gerador local = KeyGenerator.new()
-    gerador:mostrarInterfaceAdministrativa()
-    -- Fica à espera que o administrador feche a janela
-    enquanto espere(1) faça
-        se não game:GetService("CoreGui"):FindFirstChild("AdminKeyGenerator") então
-            quebrar
-        fim
-    fim
-    print("[ADMIN] Gerador de chaves encerrado.")
-    return -- Termina o script após gerar uma chave
-fim
+if ADMIN_MODE then
+    print("[ADMIN] Admin mode activated. Opening key generator...")
+    local generator = KeyGenerator.new()
+    generator:showAdminUI()
+    while wait(1) do
+        if not game:GetService("CoreGui"):FindFirstChild("AdminKeyGenerator") then
+            break
+        end
+    end
+    print("[ADMIN] Key generator closed.")
+    return
+end
 
--- Modo normal (execução principal)
-proteção local = ProtectionSystem.new()
-se protection:checkDetection() então
-    print("[PROTEÇÃO] MODO SEGURO ATIVADO.")
-    aguarde(60)
+local protection = ProtectionSystem.new()
+if protection:checkDetection() then
+    print("[PROTECTION] SAFE MODE ACTIVATED.")
+    wait(60)
     local emergencyFunc = protection:loadEmergencyScript()
-    se emergencyFunc então
-        funçãoDeEmergência()
-    outro
-        print("[PROTECAO] Nenhuma versão de emergência disponível. Encerrando.")
-        retornar
-    fim
-fim
+    if emergencyFunc then
+        emergencyFunc()
+    else
+        print("[PROTECTION] No emergency version available. Exiting.")
+        return
+    end
+end
 
-atualizador local = UpdateSystem.new()
-atualizador:verificarAtualização()
-se updater.updateAvailable então
-    tarefa.spawn(função()
-        atualizador:baixarAtualização()
-    fim)
-fim
+local updater = UpdateSystem.new()
+updater:checkForUpdate()
+if updater.updateAvailable then
+    task.spawn(function()
+        updater:downloadUpdate()
+    end)
+end
 
 local func = updater:loadScript()
-se func então
-    print("[SCRIPT] Executando versão principal...")
-    mostrarIntrodução()
-    otimizarJogo()
-    agente local = Agente.novo()
-    se agente então
-        agente:executar()
-    outro
-        print("Falha ao inicializar o agente. Verifique sua chave.")
-    fim
-outro
-    print("[SCRIPT] ERRO: Falha ao carregar script.")
-fim
+if func then
+    print("[SCRIPT] Running main version...")
+    showIntro()
+    optimizeGame()
+    local agent = Agent.new()
+    if agent then
+        agent:run()
+    else
+        print("Failed to initialize agent. Check your key.")
+    end
+else
+    print("[SCRIPT] ERROR: Failed to load script.")
+end
 
-print("SCRIPT GOGO - FINALIZADO")
+print("SCRIPT GOGO - FINISHED")
