@@ -1,0 +1,15 @@
+-- ALL FEATURES:
+-- - Full GUI with tabs, bars, buttons, logs
+-- - Emergency mode
+-- - File logging system
+-- - Auto Save (30s)
+-- - Data cache
+-- - Webhook notifications
+-- - Auto Redeem codes (2x XP)
+-- - Daily key (LootLabs) + Permanent key (UserId)
+-- - Automatic permanent key generator (admin mode)
+-- - Auto-update (GitHub, no player kick)
+-- - Auto-protection (detection + safe mode)
+-- - Async AI (no freezes)
+-- - Farm, Mastery, GodHuman, Raids, Quest, Haki, Fruits
+-- ============================================
