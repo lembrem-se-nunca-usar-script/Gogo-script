@@ -30,7 +30,7 @@ local KeyConfig = {
 
 local WebhookConfig = {
     URL = "",
-    Enabled = false,
+    Enabled = true,
 }
 
 local CodeConfig = {
@@ -43,11 +43,8 @@ local CodeConfig = {
     }
 }
 
-local ADMIN_MODE = false
+local ADMIN_MODE = true
 
--- ============================================
--- WEBHOOK SYSTEM
--- ============================================
 local Webhook = {}
 Webhook.__index = Webhook
 
@@ -2019,9 +2016,6 @@ function Agent:run()
     end
 end
 
--- ============================================
--- INTRO
--- ============================================
 local function showIntro()
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "Intro"
@@ -2139,10 +2133,6 @@ local function showIntro()
 
     wait(4)
 end
-
--- ============================================
--- INITIALIZATION
--- ============================================
 
 if ADMIN_MODE then
     print("[ADMIN] Admin mode activated. Opening key generator...")
