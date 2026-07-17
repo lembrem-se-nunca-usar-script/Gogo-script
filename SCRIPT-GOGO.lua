@@ -1301,9 +1301,6 @@ function GUI:update(state, agent)
     end)
 end
 
--- ============================================
--- MAIN AGENT
--- ============================================
 local Agent = {}
 Agent.__index = Agent
 
