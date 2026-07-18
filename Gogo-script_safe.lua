@@ -186,10 +186,8 @@ end
 
 print("[SAFE MODE] Initializing emergency farm...")
 
--- Check if key exists (but continue anyway in emergency)
 checkKey()
 
--- Wait for character to be fully loaded
 if not character or not humanoid then
     print("[SAFE MODE] Waiting for character...")
     repeat wait(1)
@@ -200,7 +198,6 @@ end
 
 print("[SAFE MODE] Character ready. Level: " .. (player.Data and player.Data.Level and player.Data.Level.Value or "?"))
 
--- Start farming
 local success, err = pcall(farmLoop)
 if not success then
     print("[SAFE MODE] Error in farm loop: " .. tostring(err))
@@ -208,7 +205,6 @@ if not success then
     pcall(fallbackFarm)
 end
 
--- Keep script alive
 while isRunning do
     wait(1)
 end
